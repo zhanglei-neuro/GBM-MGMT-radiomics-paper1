@@ -1,0 +1,27 @@
+# —— 影像原始数据 ——
+*.dcm
+*.ima
+*.nii
+*.nii.gz
+
+# —— 临床数据表 ——
+GBM_clinical_data.xlsx
+cohort_MGMT.csv
+Glioma_Patients_Classified_merged.xlsx
+
+# —— 姓名映射 / 患者标识对照（含 PHI）——
+# 本地运行需要时，把 _internal/patient_ids_local.csv 复制为 tools/patient_ids_local.csv，
+# 或设置环境变量 PAPER1_PATIENT_MAP 指向该文件。**不要提交**。
+id_mapping*.csv
+*_mapping*.csv
+patient_ids_local.csv
+patient_alias_local.csv
+tools/patient_ids_local.csv
+tools/patient_alias_local.csv
+
+# —— 缓存与临时文件 ——
+__pycache__/
+*.pyc
+*.log
+~$*.docx
+~$*.xlsx

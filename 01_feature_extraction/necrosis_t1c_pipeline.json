@@ -1,0 +1,9 @@
+{
+    "1": {
+        "task": "Model selection",
+        "model": "MRI_Necrosis",
+        "timestamp": 0,
+        "format": "thresholding",
+        "description": "Model selection for Necrosis (t1c-only staging)"
+    }
+}
