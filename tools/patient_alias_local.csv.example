@@ -1,0 +1,5 @@
+clinical_name,patient_id_public
+# 临床表 GBM_clinical_data.xlsx 的 Name 列与影像队列目录名拼写不一致的病例。
+# 每行两条：临床表拼写, 去标识编号。例如：
+# <ClinicalSpelling>,Pxxx
+# 本文件只含"拼写变体 + 编号"，不含姓名，可随仓库发布；缺省为空。

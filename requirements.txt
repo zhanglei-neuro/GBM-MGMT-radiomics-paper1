@@ -1,0 +1,24 @@
+# Paper 1 — analysis environment
+# Python 3.12 environment. Install with:  pip install -r requirements.txt
+# Versions listed are those used to produce the reported results.
+
+numpy==1.26.4
+pandas>=2.0
+scipy>=1.11
+scikit-learn==1.5.1
+xgboost==3.4.1
+shap>=0.44
+matplotlib>=3.8
+seaborn>=0.13
+statsmodels>=0.14
+openpyxl>=3.1
+lifelines>=0.27
+python-docx>=1.1
+pillow>=10.0
+
+# ComBat harmonization
+neuroCombat==0.2.12
+
+# --- extracted in a SEPARATE environment (Python 3.9) ---
+# conda create -n nnunet python=3.9
+# pip install pyradiomics==3.1.0 pydicom SimpleITK
