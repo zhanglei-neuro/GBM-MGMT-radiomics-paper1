@@ -191,23 +191,29 @@ for k in ['GTR', 'PTR', 'BTR']:
         'GE (n=%d)' % int(G.sum()): fmt_cat(mask[G], den[G]),
         'p (Siemens vs GE)': ('%.3f' % p) if not np.isnan(p) else '', 'Test': 'χ² / Fisher', 'n reported': int(den.sum())})
 
-# --- 肿瘤部位 (脑叶, 以颞叶 vs 非颞叶为主对比) ---
-tl = M['lobe'].str.contains('Temporal', case=False, na=False)
+# --- 肿瘤部位 (逐脑叶受累, 非互斥; 2026-11-04 修订) ---
+# 原版仅报告"颞叶受累"与"多叶/胼胝体(含斜杠)"两行, 遗漏额叶/顶叶/枕叶等主要脑叶,
+# 且"多叶"实为"报告列出 >=2 个部位(以 / 分隔)"的近似, 与"胼胝体"混在一行.
+# 现改为: 四个皮层脑叶 + 胼胝体 各自一行(受累即计, 同一病例可计入多个脑叶),
+# 另保留"多部位(>=2 处)"行以对应建模时使用的 multi 标记.
 den = M['lobe'].ne('nan') & M['lobe'].notna()
-p = cat_p(tl[S].astype(float), tl[G].astype(float))
-rows.append({'Characteristic': 'Tumour location — temporal lobe involvement — n (%)',
-    'All (n=%d)' % len(M): fmt_cat(tl, den),
-    'Siemens (n=%d)' % int(S.sum()): fmt_cat(tl[S], den[S]),
-    'GE (n=%d)' % int(G.sum()): fmt_cat(tl[G], den[G]),
-    'p (Siemens vs GE)': ('%.3f' % p) if not np.isnan(p) else '', 'Test': 'χ²', 'n reported': int(den.sum())})
+for _lab, _kw in [('frontal lobe', 'Frontal lobe'), ('temporal lobe', 'Temporal lobe'),
+                  ('parietal lobe', 'Parietal lobe'), ('occipital lobe', 'Occipital lobe'),
+                  ('corpus callosum', 'Corpus callosum')]:
+    mask = M['lobe'].str.contains(_kw, case=False, na=False)
+    p = cat_p(mask[S].astype(float), mask[G].astype(float))
+    rows.append({'Characteristic': 'Tumour location — %s involvement — n (%%)' % _lab,
+        'All (n=%d)' % len(M): fmt_cat(mask, den),
+        'Siemens (n=%d)' % int(S.sum()): fmt_cat(mask[S], den[S]),
+        'GE (n=%d)' % int(G.sum()): fmt_cat(mask[G], den[G]),
+        'p (Siemens vs GE)': ('%.3f' % p) if not np.isnan(p) else '', 'Test': 'χ² / Fisher', 'n reported': int(den.sum())})
 multi = M['lobe'].str.contains('/', na=False)
-den2 = M['lobe'].ne('nan') & M['lobe'].notna()
 p = cat_p(multi[S].astype(float), multi[G].astype(float))
-rows.append({'Characteristic': 'Tumour location — multilobar/corpus callosum — n (%)',
-    'All (n=%d)' % len(M): fmt_cat(multi, den2),
-    'Siemens (n=%d)' % int(S.sum()): fmt_cat(multi[S], den2[S]),
-    'GE (n=%d)' % int(G.sum()): fmt_cat(multi[G], den2[G]),
-    'p (Siemens vs GE)': ('%.3f' % p) if not np.isnan(p) else '', 'Test': 'χ²', 'n reported': int(den2.sum())})
+rows.append({'Characteristic': 'Tumour location — multilobar (≥2 sites reported) — n (%)',
+    'All (n=%d)' % len(M): fmt_cat(multi, den),
+    'Siemens (n=%d)' % int(S.sum()): fmt_cat(multi[S], den[S]),
+    'GE (n=%d)' % int(G.sum()): fmt_cat(multi[G], den[G]),
+    'p (Siemens vs GE)': ('%.3f' % p) if not np.isnan(p) else '', 'Test': 'χ² / Fisher', 'n reported': int(den.sum())})
 
 # --- 体积 ---
 for lab, col in [('Tumour core volume, mL', 'tc'), ('Necrosis volume, mL', 'ne'),
