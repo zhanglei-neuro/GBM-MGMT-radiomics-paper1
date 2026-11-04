@@ -5,7 +5,8 @@
 This repository contains the complete analysis code for the above manuscript. It covers the whole
 pipeline from DICOM inventory to the final figures and tables.
 
-> **Companion data deposit (Zenodo):** https://doi.org/10.5281/zenodo.XXXXXXX
+> **Companion data deposit (Zenodo):** https://doi.org/10.5281/zenodo.23836374
+> *(DOI reserved; the deposit becomes public when the manuscript is accepted.)*
 > Per-case radiomic feature matrices, out-of-fold predictions, per-case volumes and all
 > intermediate results (JSON/CSV) are archived there. **The data are not in this repository.**
 
@@ -204,7 +205,7 @@ hard-coded path and what it should point to.
   author  = {<Author list>},
   journal = {<Journal>},
   year    = {2026},
-  note    = {Code: https://github.com/<user>/<repo>; Data: https://doi.org/10.5281/zenodo.XXXXXXX}
+  note    = {Code: https://github.com/zhanglei-neuro/GBM-MGMT-radiomics-paper1 (tag v1.0.1); Data: https://doi.org/10.5281/zenodo.23836374}
 }
 ```
 
