@@ -206,7 +206,7 @@ hard-coded path and what it should point to.
   author  = {<Author list>},
   journal = {<Journal>},
   year    = {2026},
-  note    = {Code: https://github.com/zhanglei-neuro/GBM-MGMT-radiomics-paper1 (tag v1.0.1); Data: https://doi.org/10.5281/zenodo.23836374}
+  note    = {Code: https://github.com/zhanglei-neuro/GBM-MGMT-radiomics-paper1 (tag v1.0.2); Data: https://doi.org/10.5281/zenodo.23836374}
 }
 ```
 
