@@ -1,14 +1,18 @@
 # -*- coding: utf-8 -*-
-r"""Paper 1 -- R2-Major3: GE 亚组内 AUC 是否可由随机波动解释
-对 GE 亚组 (n=32, MGMT+ 13 / - 19) 做标签置换 null 分布:
-  - 置换标签 100 次, 每次用与主分析完全相同的管线 (单变量|AUC-.5| top200 -> 去相关
-    -> <=40 特征 -> L2 logistic 内层 3 折调参) 跑 5 折 CV, 计算合并 OOF AUC
-  - 报告 null 分布分位数, 并给出实际 AUC (logistic 0.328 / XGBoost 0.220) 的经验 p
-输出: analysis/ge_perm_null.json
+r"""Paper 1 -- R2-Major3: can the AUC inside the GE subgroup be explained by chance
+
+Builds a label-permutation null distribution for the GE subgroup (n=32, MGMT+ 13 / - 19):
+- permute the labels 100 times, each time running the pipeline identical to the main analysis
+  (univariate |AUC-.5| top 200 -> de-correlation -> <=40 features -> L2 logistic with inner 3-fold tuning)
+  through 5-fold CV, and compute the pooled OOF AUC
+- report the quantiles of the null and the empirical p value of the observed AUC
+  (logistic 0.328 / XGBoost 0.220)
+
+Output: analysis/ge_perm_null.json
 """
 import os as _os, sys as _sys
 _sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), '..', 'tools'))
-from patient_ids import to_id   # noqa: E402  患者编号 <-> 本地姓名
+from patient_ids import to_id   # noqa: E402  patient code <-> local name
 import os, sys, json, warnings
 import numpy as np, pandas as pd
 from sklearn.model_selection import StratifiedKFold, GridSearchCV
@@ -29,13 +33,13 @@ def log(*a): print(*a, flush=True)
 df = pd.read_csv(os.path.join(SRC, 'radiomics_features_long.csv'), encoding='utf-8-sig')
 df['feat'] = df['roi'] + '|' + df['seq'] + '|' + df['feature']
 Xall = df.pivot_table(index='patient', columns='feat', values='value', aggfunc='first')
-Xall.index = [to_id(p) for p in Xall.index]        # 数据键统一为 Pxxx
+Xall.index = [to_id(p) for p in Xall.index]        # all data keys are Pxxx
 co = pd.read_csv(os.path.join(SRC, 'cohort_MGMT.csv'), encoding='utf-8-sig')
 co['y'] = co['MGMT'].astype(str).str.strip().map(lambda s: 1 if s.startswith('+') else 0)
 co = co.set_index('patient')
 co.index = [to_id(p) for p in co.index]
-# 排除 United Imaging 1.5T 单例 (见稿件 3.8)。按 vendor 判断, 不按姓名:
-# 发布版数据的患者标识为 Pxxx, 按姓名排除会静默失效并改变 n。
+# Exclude the single United Imaging 1.5T case (see manuscript 3.8). Decided by vendor, not by name:
+# in the released data patients are Pxxx, so excluding by name fails silently and changes n.
 common = [p for p in co.index if p in Xall.index
           and str(co.loc[p, 'vendor']).strip() != 'UIH']
 X = Xall.loc[common].copy()
@@ -79,7 +83,7 @@ def cv_auc(X_, y_, seed):
     return float(roc_auc_score(y_, p))
 
 
-# 实际 AUC (同管线, 同 SEED, logistic)
+# observed AUC (same pipeline, same SEED, logistic)
 obs = cv_auc(Xg, yg, SEED)
 log('observed GE logistic AUC = %.4f' % obs)
 

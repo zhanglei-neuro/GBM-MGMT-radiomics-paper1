@@ -1,14 +1,14 @@
 # -*- coding: utf-8 -*-
-r"""全队列场强/厂商核验 —— 逐例读取 E:\NeuroImagepre\<患者>\ 下的首个可读 DICOM 头，
-输出 Manufacturer / ManufacturerModelName / MagneticFieldStrength。
+r"""Vendor and field-strength audit for the whole cohort: read the first readable DICOM header under
+E:\NeuroImagepre\<patient>\ for every case, and report Manufacturer / ManufacturerModelName / MagneticFieldStrength.
 
-背景：临床表 GBM_clinical_data.xlsx 的 MRI_vendor 列存在陈旧/错误标注
-（如 P055 被标为 UIH，实为 Siemens），不能作为平台归属依据；
-Paper 1 已改用 DICOM 实测厂商。本脚本将该做法推广到全部患者，
-并检出 Paper 2 随访队列中混入的第 2 例 United Imaging uMR560 1.5 T（P055）。
+Background: the MRI_vendor column of GBM_clinical_data.xlsx carries stale or wrong labels (P055 is labelled UIH but is
+in fact Siemens), so it cannot be relied on for platform attribution, and Paper 1 now uses the DICOM-measured vendor.
+This script generalises that practice to every patient and turned up the second United Imaging uMR560 1.5 T case
+(P055) hiding in the Paper 2 follow-up cohort.
 
-用法: python audit_vendor_fieldstrength.py <患者名单csv> <输出csv>
-      患者名单 csv 需含列 'patient'
+Usage: python audit_vendor_fieldstrength.py <patient list csv> <output csv>
+The patient list csv must contain a column named 'patient'.
 """
 import os
 import sys
@@ -19,7 +19,7 @@ DICOM_ROOT = r'E:\NeuroImagepre'
 
 
 def scan_first_hdr(base):
-    """深度遍历目录，返回首个可读 DICOM 头的 (Manufacturer, Model, FieldStrength)。"""
+    """Walk the directory and return (Manufacturer, Model, FieldStrength) from the first readable DICOM header."""
     for root, _dirs, files in os.walk(base):
         for f in sorted(files):
             try:
@@ -48,7 +48,7 @@ def main():
     print(df.groupby(['Manufacturer', 'Model', 'FieldStrength']).size().to_string())
     bad = df[~df['FieldStrength'].astype(str).str.startswith('3')]
     if len(bad):
-        print('\n非 3.0 T 病例（应排除）:')
+        print('\ncases that are not 3.0 T (to be excluded):')
         print(bad.to_string())
 
 

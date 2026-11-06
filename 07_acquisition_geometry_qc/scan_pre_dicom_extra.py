@@ -1,13 +1,13 @@
 # -*- coding: utf-8 -*-
-r"""
-补充扫描：E:\NeuroImagepre 中 3 个 PAT/STUDY/SERIES/IMG 结构的病例
-+ D:\Raidionics_data\disc_* 的 2 例（P004 / P025）。
-统一逻辑：找出所有"直接包含 DICOM 文件的目录"，每个目录视为一个 series。
-追加到 pre_dicom_series_inventory.csv
+r"""Supplementary scan: the 3 cases under E:\NeuroImagepre that use a PAT/STUDY/SERIES/IMG structure,
+plus the 2 cases under D:\Raidionics_data\disc_* (P004 / P025).
+
+One rule throughout: find every directory that directly contains DICOM files and treat each as one series.
+Appends to pre_dicom_series_inventory.csv.
 """
 import os as _os, sys as _sys
 _sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), '..', 'tools'))
-from patient_ids import to_name   # noqa: E402  患者编号 <-> 本地姓名
+from patient_ids import to_name   # noqa: E402  patient code <-> local name
 import os, csv
 import pydicom
 import pandas as pd
@@ -56,7 +56,7 @@ def probe(series_dir):
     return None
 
 def walk_series(root):
-    """返回 root 下所有直接包含 DICOM 的目录"""
+    """Return every directory under root that directly contains DICOM files"""
     found = []
     for dirpath, dirnames, filenames in os.walk(root):
         if not filenames:
@@ -64,16 +64,16 @@ def walk_series(root):
         f0 = os.path.join(dirpath, filenames[0])
         if is_dicom(f0):
             found.append(dirpath)
-            dirnames[:] = []  # 不下钻
+            dirnames[:] = []  # do not descend further
     return found
 
 def main():
     rows = []
     targets = []
-    # 1) E 盘三个特殊结构病例
+    # 1) the three cases with an unusual structure on the E: drive
     for p in [to_name(x) for x in ["P057", "P060", "P089"]]:
         targets.append((p, os.path.join(r"E:\NeuroImagepre", p)))
-    # 2) disc_ 两例
+    # 2) the two disc_ cases
     for p in [to_name(x) for x in ["P004", "P025"]]:
         targets.append((p, os.path.join(r"D:\Raidionics_data", "disc_" + p.lower())))
 

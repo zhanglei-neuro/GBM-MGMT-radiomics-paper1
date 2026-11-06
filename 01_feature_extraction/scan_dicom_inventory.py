@@ -1,11 +1,14 @@
 # -*- coding: utf-8 -*-
-r"""Raidionics GBM 批量分割 - 步骤1: DICOM 数据摸底
-扫描 D:\NeuroImagepre 全部患者的 DICOM 序列, 产出:
-  - dicom_inventory.csv   每个序列的头信息
-  - series_selection.csv  每个患者选定的 T1-CE / FLAIR / T1 平扫 序列路径
-判定规则 (铁律):
-  - T1-CE 以 ContrastBolusAgent (0018,0010) 非空为准, 绝不信序列名
-  - 缺层判定用切片法向量投影间距, 不用 InstanceNumber / 简单 z 差
+r"""Raidionics GBM batch segmentation - step 1: survey the DICOM data
+
+Scan every patient series under D:\NeuroImagepre and produce:
+  - dicom_inventory.csv   header information for each series
+  - series_selection.csv  the T1-CE / FLAIR / unenhanced T1 series path chosen for each patient
+
+Decision rules (hard rules):
+  - T1-CE is decided by a non-empty ContrastBolusAgent (0018,0010); never trust the series name
+  - missing-slice detection uses the projected spacing along the slice normal, not InstanceNumber or a
+    simple z difference
 """
 import os, sys, csv, math, traceback
 import pydicom
@@ -15,7 +18,7 @@ ROOT = r"D:\NeuroImagepre"
 OUT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 def find_series_dirs(patient_dir):
-    """返回 [(series_dir, [dcm_files])]"""
+    """Return [(series_dir, [dcm_files])]"""
     result = []
     for dirpath, dirnames, filenames in os.walk(patient_dir):
         dcms = [f for f in filenames if f.lower().endswith(('.dcm', '.ima'))]
@@ -24,7 +27,7 @@ def find_series_dirs(patient_dir):
     return result
 
 def series_info(series_dir, files):
-    """读取序列头信息"""
+    """Read the series header information"""
     n = len(files)
     first = pydicom.dcmread(os.path.join(series_dir, files[0]), stop_before_pixels=True)
     mid = pydicom.dcmread(os.path.join(series_dir, files[n // 2]), stop_before_pixels=True)
@@ -55,7 +58,7 @@ def series_info(series_dir, files):
         if iop is not None and ipp_first is not None and ipp_mid is not None:
             normal = np.cross(np.array(iop[:3], dtype=float), np.array(iop[3:], dtype=float))
             normal /= np.linalg.norm(normal)
-            # 采样若干切片投影
+            # sample projections over several slices
             positions = []
             sample_idx = list(range(0, n, max(1, n // 40)))
             for i in sample_idx:
@@ -67,14 +70,14 @@ def series_info(series_dir, files):
             positions.sort()
             if len(positions) >= 3:
                 diffs = np.diff(positions)
-                diffs = diffs[diffs > 0.01]  # 去重同位置
+                diffs = diffs[diffs > 0.01]  # collapse repeated positions
                 if len(diffs):
                     slice_sp = round(float(np.median(diffs)), 3)
-                    # 缺层判定: 间距波动 > 30%
+                    # missing-slice detection: spacing variation > 30%
                     if diffs.max() > slice_sp * 1.35 or diffs.min() < slice_sp * 0.65:
                         gap_bad = True
                         gap_report = f"min={diffs.min():.2f} max={diffs.max():.2f} med={slice_sp}"
-        # 无方位标签时退化为 z 差
+        # without an orientation tag, fall back to the z difference
         if slice_sp is None and ipp_first is not None and ipp_mid is not None:
             dz = abs(float(ipp_mid[2]) - float(ipp_first[2]))
             slice_sp = round(dz, 3) if dz > 0.01 else None
@@ -87,13 +90,13 @@ def series_info(series_dir, files):
                 gap_bad=gap_bad, gap_report=gap_report)
 
 def classify(info):
-    """角色判定: t1ce / flair / t1 / other"""
+    """Role assignment: t1ce / flair / t1 / other"""
     desc_l = info['desc'].lower()
     has_contrast = bool(info['contrast_agent'])
     is_t1 = ('t1' in desc_l) or ('mprage' in desc_l) or ('mp-rage' in desc_l)
-    is_flair = ('flair' in desc_l) and ('t1' not in desc_l)  # "T1 FLAIR" 常是平扫干扰名
+    is_flair = ('flair' in desc_l) and ('t1' not in desc_l)  # "T1 FLAIR" is often a decoy name for an unenhanced series
     if not is_flair and ('flair' in desc_l):
-        # 名字同时含 t1 和 flair 的, 交给对比剂标签决定
+        # where the name holds both t1 and flair, let the contrast tag decide
         is_flair = False
     if is_t1 and has_contrast:
         return 't1ce'
@@ -102,7 +105,7 @@ def classify(info):
     if is_t1 and not has_contrast:
         return 't1'
     if has_contrast and not is_flair:
-        return 't1ce?'  # 有对比剂但名字不带 T1, 疑似 T1-CE, 需人工复核
+        return 't1ce?'  # contrast present but no T1 in the name: probably T1-CE, needs a manual check
     return 'other'
 
 def main():
@@ -126,7 +129,7 @@ def main():
             info['role'] = classify(info)
             infos.append(info)
             inv_rows.append(info)
-        # 选择: 每个角色选层数最多且无缺层的; t1ce 优先有对比剂的
+        # selection: per role take the one with most slices and no missing slices; for t1ce prefer the contrast-enhanced one
         def pick(role):
             cand = [x for x in infos if x['role'] == role or (role == 't1ce' and x['role'] == 't1ce?')]
             if not cand:
@@ -161,8 +164,8 @@ def main():
         w.writerows(sel_rows)
 
     n_complete = sum(1 for s in sel_rows if s['t1ce'] and s['flair'] and s['t1'])
-    print(f"\n共 {len(patients)} 患者, 三序列齐全 {n_complete} 例")
-    print("完成")
+    print(f"\n{len(patients)} patients in total, {n_complete} with all three sequences")
+    print("done")
 
 if __name__ == '__main__':
     main()

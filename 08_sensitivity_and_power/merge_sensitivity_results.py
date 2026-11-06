@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
-r"""合并 4 个并行敏感性分析结果 -> analysis/sensitivity_cohorts.json + tables/S4_*.csv/.md
+r"""Merge the 4 parallel sensitivity analyses -> analysis/sensitivity_cohorts.json + tables/S4_*.csv/.md
 
-用法: python merge_sens.py
+Usage: python merge_sensitivity_results.py
 """
 import os
 import json

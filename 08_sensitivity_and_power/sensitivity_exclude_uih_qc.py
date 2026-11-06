@@ -1,15 +1,15 @@
 # -*- coding: utf-8 -*-
-r"""
-Paper 1 -- 敏感性分析（rev.7: 影像日期异常已修复, 队列口径更新）
-1) 排除 United Imaging 病例 (P021, n=1)  --- 用户问题 1
-2) 仅保留 3D 薄层 (<=1.2mm) 子集 --- 用户问题 2 的技术对照
+r"""Paper 1 -- sensitivity analyses (rev.7: the anomalous imaging dates are fixed, cohort definition updated)
 
-完全复用 paper1_analysis.py 的建模管线 (同一 SEED / CV 结构 / 特征筛选)。
-输出: analysis/sensitivity_cohorts.json
+1) Exclude the United Imaging case (P021, n=1)   --- reply to user question 1
+2) Keep only the 3D thin-slice (<=1.2 mm) subset --- the technical comparator for user question 2
+
+Reuses the modelling pipeline of the main analysis exactly (same SEED / CV structure / feature screening).
+Output: analysis/sensitivity_cohorts.json
 """
 import os as _os, sys as _sys
 _sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), '..', 'tools'))
-from patient_ids import to_id   # noqa: E402  患者编号 <-> 本地姓名
+from patient_ids import to_id   # noqa: E402  patient code <-> local name
 import os, json, warnings
 import numpy as np
 import pandas as pd
@@ -34,7 +34,7 @@ Xall = df.pivot_table(index='patient', columns='feat', values='value', aggfunc='
 co = pd.read_csv(os.path.join(SRC, 'cohort_MGMT.csv'), encoding='utf-8-sig')
 co['y'] = co['MGMT'].astype(str).str.strip().map(lambda s: 1 if s.startswith('+') else 0)
 co = co.set_index('patient')
-co.index = [to_id(p) for p in co.index]        # 数据键统一为 Pxxx
+co.index = [to_id(p) for p in co.index]        # all data keys are Pxxx
 Xall.index = [to_id(p) for p in Xall.index]
 common = [p for p in co.index if p in Xall.index]
 X = Xall.loc[common].copy()
@@ -126,7 +126,7 @@ def run_cohort(mask, label):
     for name in ['logistic', 'xgboost', 'randomforest']:
         m, s = rep_nested(name, Xc, yc)
         res['models'][name] = {'auc': round(m, 4), 'sd': round(s, 4)}
-    # 临床基线
+    # clinical baseline
     Xcl = pd.DataFrame({'age': age[mask], 'male': male[mask]}, index=Xc.index)
     p = np.zeros(len(yc))
     for r in range(REPEATS):
@@ -148,14 +148,14 @@ def run_cohort(mask, label):
     return res
 
 
-# ---------- 定义各组 ----------
+# ---------- define the cohorts ----------
 idx = pd.Index(X.index)
 uiH = np.array([str(co.loc[p, 'vendor']).strip() == 'UIH'
-                for p in idx])   # 按 vendor 判断, 不按姓名
+                for p in idx])   # decided by vendor, not by name
 
-# 3D 薄层子集
+# 3D thin-slice subset
 s1b = pd.read_csv(os.path.join(OUT, 'supplementary/tables/S1b_paper1_per_case.csv'))
-s1b['Patient'] = [to_id(p) for p in s1b['Patient']]   # 与 idx 同一命名空间
+s1b['Patient'] = [to_id(p) for p in s1b['Patient']]   # same namespace as idx
 t1c = s1b[s1b['Sequence role'] == 'T1C'].copy()
 t1c['th'] = pd.to_numeric(t1c['Slice thickness (mm)'], errors='coerce')
 thin = set(t1c.loc[t1c.th <= 1.2, 'Patient'])
@@ -163,8 +163,8 @@ thick = set(t1c.loc[t1c.th >= 3, 'Patient'])
 is_thin = idx.isin(list(thin))
 is_thick = idx.isin(list(thick))
 
-# 人口学平衡
-print('=== 2D 厚层 vs 3D 薄层 人口学 ===')
+# demographic balance
+print('=== demographics: 2D thick-slice vs 3D thin-slice ===')
 for nm, m in [('3D thin', is_thin), ('2D thick', is_thick)]:
     print('  %-9s n=%2d  age=%.1f  male=%.0f%%  MGMT+=%d' % (
         nm, m.sum(), np.nanmean(age[m]), 100 * np.nanmean(male[m]), int(y[m].sum())))
@@ -184,7 +184,7 @@ cohorts = [
 out = []
 for m, lab in cohorts:
     r = run_cohort(m, lab)
-    r['tag'] = lab[0]        # 与 merge_sensitivity_results.py 同一口径 (A/B/C/D)
+    r['tag'] = lab[0]        # same convention as merge_sensitivity_results.py (A/B/C/D)
     out.append(r)
 
 json.dump(out, open(os.path.join(ANA, 'sensitivity_cohorts.json'), 'w'),

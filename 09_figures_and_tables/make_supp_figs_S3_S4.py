@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-r"""Paper 1 -- 补充图 S3 (批次效应定量化) 与 S4 (厂商 vs 采集协议 去混杂分解)"""
+r"""Paper 1 -- Supplementary Figure S3 (quantifying the batch effect) and S4 (deconfounding decomposition of vendor vs acquisition protocol)"""
 import os, json, warnings
 import numpy as np, pandas as pd
 import matplotlib
@@ -14,12 +14,12 @@ plt.rcParams['font.size'] = 9
 plt.rcParams['axes.spines.top'] = False
 plt.rcParams['axes.spines.right'] = False
 
-# ---------------- 图 S3 ----------------
+# ---------------- Figure S3 ----------------
 rev = json.load(open(os.path.join(ANA, 'review_metrics.json')))
 asw = rev['asw']; pca = rev['pca_variance_between_groups']
 
 fig, axes = plt.subplots(1, 3, figsize=(11, 3.2))
-# (a) ASW 对比
+# (a) ASW comparison
 ax = axes[0]
 labels = ['Vendor\n(Siemens vs GE)', 'MGMT\n(methylated vs not)']
 vals = [asw['vendor']['asw'], asw['mgmt']['asw']]
@@ -34,7 +34,7 @@ ax.set_title('(a) Quantitative batch separation', fontsize=9.5)
 ax.set_ylim(0, max(vals) * 1.45)
 ax.axhline(0, color='k', lw=0.6)
 
-# (b) PC1-10 组间变异占比
+# (b) Between-group share of variance across PC1-10
 ax = axes[1]
 v2 = [pca['vendor_between_group_share_pc1_10'], pca['mgmt_between_group_share_pc1_10']]
 b = ax.bar(['Vendor', 'MGMT'], [x * 100 for x in v2], color=cols, width=0.55)
@@ -45,7 +45,7 @@ ax.set_ylabel('Between-group variance share of PC1–10 (%)')
 ax.set_title('(b) Variance decomposition', fontsize=9.5)
 ax.set_ylim(0, max(v2) * 100 * 1.3)
 
-# (c) PC 方差解释率 (scree)
+# (c) Variance explained per PC (scree)
 ax = axes[2]
 sc = pca['top10_pc_variance_explained']
 ax.bar(range(1, len(sc) + 1), [x * 100 for x in sc], color='#4472C4', width=0.6)
@@ -58,11 +58,11 @@ fig.savefig(os.path.join(FIG, 'FigureS3_batch_effect_quantification.png'), dpi=3
 plt.close(fig)
 print('saved FigureS3')
 
-# ---------------- 图 S4 ----------------
+# ---------------- Figure S4 ----------------
 m4 = json.load(open(os.path.join(ANA, 'm4_vendor_vs_protocol.json')))
 fig, axes = plt.subplots(1, 2, figsize=(9.5, 3.4))
 
-# (a) 显著特征数对比
+# (a) Number of significant features
 ax = axes[0]
 u = m4['unadjusted_vendor_only']['q05']
 a = m4['adjusted_for_acquisition']['q05']
@@ -75,7 +75,7 @@ ax.set_ylabel('BH-FDR q < 0.05 features (out of 4148)')
 ax.set_ylim(0, u * 1.28)
 ax.set_title('(a) Vendor-significant features\nbefore vs after adjustment', fontsize=9.5)
 
-# (b) 偏 R² 对比
+# (b) Partial R-squared
 ax = axes[1]
 pv = m4['partial_r2']
 vals = [pv['vendor_given_acquisition_median'], pv['acquisition_given_vendor_median']]

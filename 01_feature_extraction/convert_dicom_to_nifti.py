@@ -1,12 +1,14 @@
 # -*- coding: utf-8 -*-
-r"""步骤2+3: 重建输入目录 + DICOM→NIfTI (文件名带角色关键词)
-输入: series_selection.csv
-输出: D:\Raidionics_data\input\2\<Patient>\T0\
-  - <pat>_t1-gd_pre.nii.gz    (T1-CE,  文件名含 'gd' → 后端识别为 T1c)
-  - <pat>_t2-flair_pre.nii.gz (FLAIR,  文件名含 'flair' → FLAIR)
-  - <pat>_t1w_pre.nii.gz      (T1平扫, 无关键词 → T1w)
-纯复制原则: 只读原始 DICOM, 不重采样/不归一化/不剥颅骨。
-可断点续跑: 已存在的目标文件跳过。
+r"""Steps 2+3: rebuild the input directory and convert DICOM -> NIfTI (file names carry the role keyword)
+
+Input:  series_selection.csv
+Output: D:\Raidionics_data\input\2\<Patient>\T0\
+  - <pat>_t1-gd_pre.nii.gz    (T1-CE; 'gd' in the name tells the backend this is T1c)
+  - <pat>_t2-flair_pre.nii.gz (FLAIR; 'flair' in the name tells the backend this is FLAIR)
+  - <pat>_t1w_pre.nii.gz      (unenhanced T1; no keyword, so T1w)
+
+Copy only: read the original DICOM, never resample, normalise or skull-strip.
+Resumable: existing target files are skipped.
 """
 import csv, os, sys
 import SimpleITK as sitk
@@ -16,11 +18,11 @@ SEL = os.path.join(BASE, 'series_selection.csv')
 CONV_LOG = os.path.join(BASE, 'conversion_log.csv')
 OUT_ROOT = r"D:\Raidionics_data\input\2"
 
-FORBIDDEN = ['gd', 'flair', 't2', 'dwi', 'tirm']  # 患者名不得含这些词, 否则文件名歧义
+FORBIDDEN = ['gd', 'flair', 't2', 'dwi', 'tirm']  # patient names must not contain these words, or the file names become ambiguous
 
 def resolve_dicom(path):
-    """盘符回退: 原始 DICOM 已从 D: 迁移到 E:, 但 series_selection.csv 保留历史 D: 路径。
-    原路径可用时按原路径; 否则尝试同路径的 E: 版本。"""
+    """Drive fallback: the original DICOM has moved from D: to E:, but series_selection.csv keeps the historic D: paths.
+    Use the original path when it is readable, otherwise try the same path on E:."""
     if not path:
         return path
     if os.path.isdir(path):
@@ -34,7 +36,7 @@ def resolve_dicom(path):
 
 
 def manual_assemble(series_dir, files_sorted, out_path):
-    """兜底: 切片位置抖动超 ITK 容差时, 按 DICOM 标签手动组装体积 (标准重建, 非重采样)"""
+    """Fallback: when slice-position jitter exceeds the ITK tolerance, assemble the volume manually from the DICOM tags (a standard reconstruction, not a resampling)"""
     import pydicom
     import numpy as np
     ds0 = pydicom.dcmread(os.path.join(series_dir, files_sorted[0]))
@@ -56,7 +58,7 @@ def manual_assemble(series_dir, files_sorted, out_path):
     z_sp = float(np.median(diffs))
     spacing = (ps_c, ps_r, z_sp)
     origin = tuple(float(v) for v in np.array(ds0.ImagePositionPatient, dtype=float))
-    # 方向矩阵: 列 = 行方向, 列方向, 法向 (LPS)
+    # direction matrix: columns are the row direction, the column direction and the normal (LPS)
     direction = tuple(np.stack([iop[3:], iop[:3], normal], axis=1).flatten().tolist())
     vol = np.stack(slices, axis=0)
     img = sitk.GetImageFromArray(vol)
@@ -69,7 +71,7 @@ def manual_assemble(series_dir, files_sorted, out_path):
 def convert_series(series_dir, out_path):
     import pydicom
     import numpy as np
-    # 按 DICOM 几何排序 + 按切片位置去重 (防止重复切片序列污染体积)
+    # sort by DICOM geometry and de-duplicate by slice position, so a repeated-slice series cannot pollute the volume
     files = [f for f in os.listdir(series_dir) if f.lower().endswith(('.dcm', '.ima'))]
     if not files:
         raise ValueError('no DICOM files found')
@@ -86,7 +88,7 @@ def convert_series(series_dir, out_path):
         key = (round(float(p[0]), 2), round(float(p[1]), 2), round(float(p[2]), 2))
         shape = (int(d.Rows), int(d.Columns))
         entries.append((float(np.dot(np.array([float(p[0]), float(p[1]), float(p[2])]), normal)), key, f, shape))
-    # 过滤掉矩阵尺寸与众数不符的杂片 (导出工具附加的截图等)
+    # drop odd slices whose matrix size differs from the mode (screenshots and the like added by the export tool)
     from collections import Counter
     shape_counts = Counter(e[3] for e in entries)
     major_shape = shape_counts.most_common(1)[0][0]
@@ -105,7 +107,7 @@ def convert_series(series_dir, out_path):
         img = reader.Execute()
         mode = 'sitk'
     except Exception:
-        # ITK 对切片非均匀性零容忍 → 手动组装
+        # ITK tolerates no slice non-uniformity -> assemble manually
         img = None
         mode = 'manual'
     if img is None:
@@ -153,7 +155,7 @@ def main():
                 print(f"[ERR] {p} {role}: {str(e)[:120]}")
                 break
         if ok:
-            # 交叉校验三个体积尺寸/间距/方向一致性
+            # cross-check the three volumes for consistent size, spacing and orientation
             try:
                 imgs = [sitk.ReadImage(dst) for _, _, dst in targets]
                 sizes = {i.GetSize() for i in imgs}

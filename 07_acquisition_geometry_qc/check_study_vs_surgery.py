@@ -1,11 +1,10 @@
 # -*- coding: utf-8 -*-
-r"""
-全局核查：每例三个序列的 StudyDate vs 手术日期。
-数据源：S1b_full_detailed.csv（含 DICOM StudyDate）+ GBM_clinical_data.xlsx（Surgery date）
+r"""Global check of StudyDate against the date of surgery for all three sequences of every case.
+Data: S1b_full_detailed.csv (with the DICOM StudyDate) and GBM_clinical_data.xlsx (Surgery date).
 """
 import os as _os, sys as _sys
 _sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), '..', 'tools'))
-from patient_ids import to_name, resolve   # noqa: E402  患者编号 <-> 本地姓名
+from patient_ids import to_name, resolve   # noqa: E402  patient code <-> local name
 import pandas as pd, numpy as np
 
 DET = r"D:\WorkBuddy\2026-10-06-10-35-00\outputs\paper1\supplementary\scripts\S1b_full_detailed.csv"
@@ -16,13 +15,13 @@ x = pd.read_excel(XLS)
 x.columns = [str(c).strip() for c in x.columns]
 x["Name"] = x["Name"].astype(str).str.strip()
 
-# 别名（临床表 -> 队列拼音）
-# 临床表 Name 列 → 本地患者目录名：先经拼写变体表与编号归一, 再还原为目录名
+# aliases (clinical table -> cohort spelling)
+# Name column of the clinical table -> local patient directory name: through the spelling-variant table and code normalisation, then back to a directory name
 x["pid"] = (x["Name"].str.replace(r"\(.*?\)", "", regex=True).str.strip()
             .map(lambda n: to_name(resolve(n))))
 
 surg = dict(zip(x.pid, pd.to_datetime(x["Surgery date"], errors="coerce")))
-print("临床表可映射手术日期:", sum(v is not None and not pd.isna(v) for v in surg.values()), "/", len(x))
+print("surgery dates mappable from the clinical table:", sum(v is not None and not pd.isna(v) for v in surg.values()), "/", len(x))
 
 def to_dt(v):
     try:
@@ -44,14 +43,14 @@ r.to_csv(r"D:\WorkBuddy\2026-10-06-10-35-00\outputs\paper1\supplementary\scripts
          index=False, encoding="utf-8-sig")
 
 piv = r.pivot_table(index="Patient", columns="Role", values="Delta_days", aggfunc="first")
-print("\n=== 序列日期晚于手术日期的记录（Postop）===")
+print("\n=== records where the series date is later than surgery (post-op) ===")
 bad = r[r["Postop?"] == True]
 print(bad.to_string(index=False))
-print(f"\n共 {bad.Patient.nunique()} 例受影响: {sorted(bad.Patient.unique())}")
+print(f"\n{bad.Patient.nunique()} cases affected: {sorted(bad.Patient.unique())}")
 
-print("\n=== 完整 Delta 分布（天）===")
+print("\n=== full delta distribution (days) ===")
 print(piv.describe().to_string())
-print("\n=== Delta > 0 的患者（任一序列）===")
+print("\n=== patients with delta > 0 (any series) ===")
 print(piv[(piv > 0).any(axis=1)].to_string())
-print("\n=== Delta 异常大（<-90 天，可能非术前最近一次）===")
+print("\n=== unusually large negative delta (< -90 days: probably not the most recent pre-operative scan) ===")
 print(piv[(piv < -90).any(axis=1)].to_string())

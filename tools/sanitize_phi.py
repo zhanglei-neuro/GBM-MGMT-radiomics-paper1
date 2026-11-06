@@ -1,17 +1,13 @@
 # -*- coding: utf-8 -*-
-r"""
-sanitize_phi.py — 把脚本中的患者姓名替换为 <PATIENT> 占位符
+r"""sanitize_phi.py -- replace patient names in the scripts with the <PATIENT> placeholder
 
-用法:
-    python tools/sanitize_phi.py --names names.txt            # 用清单匹配（推荐）
-    python tools/sanitize_phi.py --names names.txt --root .
-    python tools/sanitize_phi.py --names names.txt --dry       # 只报告不修改
+Usage:
+    python tools/sanitize_phi.py --names names.txt            # match against a list (recommended)
+    python tools/sanitize_phi.py --names names.txt --dry      # report only, change nothing
 
-清单文件格式：每行一个姓名（拼音或中文），例如
-    <Surname><Given>
-    <Surname><Given>
-会自动忽略长度 < 4 的条目。替换时按长度降序处理，避免短名误伤长名。
-中文姓名在 `ImageFileName_<中文>` 上下文中会被整体替换。
+List format: one name per line (pinyin or Chinese), for example those exported from the local mapping table.
+Entries shorter than 4 characters are ignored. Replacement runs longest-first so that a short name cannot damage a
+longer one. A Chinese name inside `ImageFileName_<Chinese>` is replaced as a whole.
 """
 import os, re, sys, argparse
 
@@ -30,7 +26,7 @@ def main():
     names = [l.strip() for l in open(a.names, encoding='utf-8') if len(l.strip()) >= 4]
     pats = [(n, re.compile(re.escape(n), re.I))
             for n in sorted(set(names), key=len, reverse=True)]
-    print('姓名清单 %d 条' % len(pats))
+    print('%d names in the list' % len(pats))
 
     total_f, total_h = 0, 0
     for dp, dirs, fs in os.walk(a.root):
@@ -50,11 +46,11 @@ def main():
             if hits:
                 total_f += 1
                 total_h += hits
-                print('  %-60s %3d 处' % (os.path.relpath(p, a.root), hits))
+                print('  %-60s %3d hits' % (os.path.relpath(p, a.root), hits))
                 if not a.dry:
                     open(p, 'w', encoding='utf-8').write(s)
-    print('\n%s：%d 个文件 / %d 处替换'
-          % ('预演' if a.dry else '完成', total_f, total_h))
+    print('\n%s: %d files / %d replacements'
+          % ('dry run' if a.dry else 'done', total_f, total_h))
 
 
 if __name__ == '__main__':

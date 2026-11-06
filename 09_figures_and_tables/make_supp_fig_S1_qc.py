@@ -14,7 +14,7 @@ Output: 300 dpi PNG + PDF, publication layout.
 """
 import os as _os, sys as _sys
 _sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), '..', 'tools'))
-from patient_ids import to_name   # noqa: E402  患者编号 <-> 本地姓名
+from patient_ids import to_name   # noqa: E402  patient ID <-> local name
 import os
 import numpy as np
 import nibabel as nib
@@ -31,7 +31,7 @@ OUT  = r"D:/WorkBuddy/2026-10-06-10-35-00/outputs/paper1/supplementary/figures"
 
 # two representative cases drawn from the Paper 1 analysis cohort (n=90)
 # (both 3D isotropic T1c, all four subregions present, contrasting morphology)
-# 键为去标识编号; 患者目录名以姓名命名, 故经 to_name() 还原为本地目录名
+# keys are de-identified IDs; patient folders are named after the patient, so to_name() maps back to the local folder name
 CASES = [to_name(x) for x in ["P096", "P064"]]
 
 # scanner annotation for the T1c row label (from Table S1b, read off the DICOM header)

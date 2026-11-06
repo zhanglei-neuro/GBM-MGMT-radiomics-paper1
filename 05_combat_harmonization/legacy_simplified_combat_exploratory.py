@@ -1,26 +1,28 @@
 # -*- coding: utf-8 -*-
-r"""[LEGACY / NOT REPORTED IN THE PAPER] 简化 ComBat 调和 —— 早期探索性实现
+r"""[LEGACY / NOT REPORTED IN THE PAPER] simplified ComBat harmonisation - an early exploratory implementation
 
-*** 本文件不是稿件所报告 ComBat 结果的实现。***
+*** This file is not the implementation behind the ComBat results reported in the paper. ***
 
-稿件 §2.7(6) 报告的方法是 neuroCombat 0.2.12（经验贝叶斯收缩），每外折在训练折内拟合、
-经 `neuroCombatFromTraining` 变换测试折。该实现位于：
-    ../02_nested_cross_validation/paper1_nested_cv.py  第 [7] 节
+The method reported in section 2.7(6) of the manuscript is neuroCombat 0.2.12 (empirical-Bayes shrinkage), fitted
+inside the training folds of each outer fold and applied to the test fold through `neuroCombatFromTraining`. That
+implementation lives in ../02_nested_cross_validation/paper1_nested_cv.py, section [7].
 
-本文件实现的是**无经验贝叶斯收缩**的简化 location/scale 版本（Johnson 2007），
-属于早期探索性尝试，其输出（predictions_combat.csv / metrics_combat.json 的旧版）
-未被稿件采用。保留仅用于溯源。
+What this file implements is the simplified location/scale version **without empirical-Bayes shrinkage** (Johnson
+2007). It was an early exploratory attempt, and its outputs (predictions_combat.csv and the older
+metrics_combat.json) were never used in the paper. It is kept for provenance only.
+
+Design of the experiment (run under the Anaconda base environment):
+- simplified ComBat (location/scale, no EB shrinkage, Johnson 2007), exposed as a fit/transform transformer
+- inside each outer fold of the nested CV: harmonisation parameters are fitted on the training folds only and
+  applied to the test fold, so nothing leaks
+- UIH n=1 cannot support a within-batch variance estimate and is dropped (n=90: Siemens 57 / GE 33)
+- feature filtering: missing rate >20% and zero variance (no KW filtering, since harmonisation exists precisely to
+  address vendor differences)
+- models: logistic / xgboost nested 5-fold plus LOVO after harmonisation
+- also reported: the number of vendor-KW-significant features before and after harmonisation, as a check on the
+  harmonisation itself
 """
-r"""ComBat 厂商调和附加实验 (D:\Anaconda base 运行)
 
-设计:
-- 简化 ComBat (location/scale, 无EB收缩, Johnson 2007), 作为可 fit/transform 的变换器
-- 在嵌套 CV 的每个外折内: 仅用训练折拟合调和参数, 应用到测试折 -> 无泄漏
-- UIH n=1 无法估计批内方差, 剔除 (n=90: Siemens 57 / GE 33)
-- 特征过滤: 缺失率>20% 与零方差 (不做 KW 过滤, 调和本就针对厂商差异)
-- 模型: logistic / xgboost 嵌套5折 + LOVO(调和后)
-- 另报告: 调和后厂商KW显著特征数(对比调和前) 验证调和效果
-"""
 import os, csv, json
 import numpy as np
 import pandas as pd
@@ -48,10 +50,10 @@ X = X.loc[common]
 y = co.loc[common, 'y'].values
 vendor = co.loc[common, 'vendor'].values
 
-# 基础过滤
+# basic filtering
 X = X[X.columns[X.isna().mean() <= 0.20]]
 X = X[X.columns[X.var() > 1e-12]]
-# 剔除 UIH
+# drop UIH
 keep_m = vendor != 'UIH'
 X, y, vendor = X.loc[keep_m], y[keep_m], vendor[keep_m]
 print('X=%s y+=%d y-=%d vendors=%s' % (X.shape, y.sum(), (1-y).sum(),
@@ -59,13 +61,13 @@ print('X=%s y+=%d y-=%d vendors=%s' % (X.shape, y.sum(), (1-y).sum(),
 
 
 class ComBat:
-    """简化ComBat: fit(X_df, batch_arr) -> transform(X_df, batch_arr)"""
+    """Simplified ComBat: fit(X_df, batch_arr) -> transform(X_df, batch_arr)"""
     def fit(self, Xdf, batch):
         self.feats = list(Xdf.columns)
         A = Xdf.values.astype(np.float64)
         self.batches = sorted(set(batch))
         n_all = len(A)
-        # grand mean (按批加权) 与 pooled sd
+        # grand mean (batch-weighted) and pooled sd
         self.alpha = np.zeros(A.shape[1])
         self.psd = np.zeros(A.shape[1])
         w = np.array([ (batch == b).sum() / n_all for b in self.batches])
@@ -92,8 +94,8 @@ class ComBat:
             if m.sum() == 0:
                 continue
             Zb = Z[m]
-            # 保留测试批自身的位置差异用于校准到训练批参数:
-            # 用测试批相对训练批的均值偏移修正 gamma
+            # keep the location difference of the test batch so the transform can be calibrated onto the
+            # training-batch parameters: correct gamma by the mean shift of the test batch relative to training
             g = self.gamma[b]
             d = self.delta[b]
             out[m] = (Zb - g) / np.sqrt(d)
@@ -113,7 +115,7 @@ def inner_select(Xtr, ytr, max_feat=200, corr_th=0.90):
             pass
     order = sorted(auc, key=auc.get, reverse=True)[:max_feat]
     kept = []
-    ranks = Xtr[order].rank()  # 预计算
+    ranks = Xtr[order].rank()  # precomputed
     for c in order:
         ok = True
         for k in kept:
@@ -173,7 +175,7 @@ for name in ['logistic', 'xgboost']:
     pred['prob_' + name] = prob
     print('ComBat nested CV %s AUC=%.3f' % (name, auc), flush=True)
 
-# LOVO 调和后
+# LOVO after harmonisation
 lovo = {}
 for v in ['Siemens', 'GE']:
     te_m = vendor == v
@@ -183,7 +185,7 @@ for v in ['Siemens', 'GE']:
     print('ComBat LOVO %s AUC=%.3f' % (v, lovo[v]['auc']), flush=True)
 results['lovo_xgboost'] = lovo
 
-# 调和效果验证: 调和前后厂商KW显著特征数
+# effect of harmonisation: number of vendor-KW-significant features before and after
 from scipy import stats
 cb = ComBat().fit(X, vendor)
 Xh = cb.transform(X, vendor)

@@ -2,6 +2,12 @@
 """Build Supplementary Tables S1 (acquisition parameters) and S2 (radiomics settings)
 for Paper 1.
 
+Role in the final package: this script is the source of **Tables S2a-S2d** and of the combined
+workbook `Supplementary_Tables_S1_S2.xlsx`. Its S1a/S1b/S1c blocks are the first-generation
+whole-database versions and are kept only so the workbook can be rebuilt; the Tables S1a-S1c that are
+actually submitted come from `07_acquisition_geometry_qc/build_s1_paper1_used.py`, which restricts to
+the 89-case cohort and keeps one series per sequence (see supplementary_tables/TABLE_LEGENDS.md).
+
 Data sources (all primary, no re-parsing of DICOM geometry):
   * input/2/<patient>/T0/*.nii.gz     — production NIfTI volumes written by
     convert_inputs.py ("pure copy" DICOM->NIfTI, no resampling) => true acquisition
@@ -13,7 +19,7 @@ Data sources (all primary, no re-parsing of DICOM geometry):
 """
 import os as _os, sys as _sys
 _sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), '..', 'tools'))
-from patient_ids import to_name   # noqa: E402  患者编号 <-> 本地姓名
+from patient_ids import to_name   # noqa: E402  patient ID <-> local name
 import os, re, csv, glob
 import numpy as np
 import pandas as pd
@@ -32,8 +38,8 @@ OUTD = r"D:/WorkBuddy/2026-10-06-10-35-00/outputs/paper1/supplementary/tables"
 BS   = chr(92)
 os.makedirs(OUTD, exist_ok=True)
 
-# 临床表 Name 列的拼写变体由 tools/patient_alias_local.csv 提供
-# (本脚本不使用该表; build_acquisition_table.py 通过 patient_ids.resolve() 使用)
+# Spelling variants of the Name column in the clinical table come from tools/patient_alias_local.csv
+# (this script does not use that file; build_acquisition_table.py uses it via patient_ids.resolve())
 
 sel = {r["patient"]: r for r in csv.DictReader(open(SEL, encoding="utf-8-sig"))}
 inv = list(csv.DictReader(open(INV, encoding="utf-8-sig")))
@@ -54,7 +60,7 @@ vendor_map = dict(zip(vm["patient_pinyin"].astype(str).str.strip(),
 clin = pd.read_excel(XLS, sheet_name=0)   # kept for reference / cohort cross-check
 clin["Name"] = clin["Name"].astype(str).str.strip()
 
-# 加测批病例（DICOM 保留在 Raidionics_data/disc_* 下）; 键为本地目录名
+# extra-batch cases (DICOM kept under Raidionics_data/disc_*); keys are local directory names
 ADDON = {to_name(x) for x in
          ["P001", "P004", "P025", "P057", "P060", "P067", "P089"]}
 

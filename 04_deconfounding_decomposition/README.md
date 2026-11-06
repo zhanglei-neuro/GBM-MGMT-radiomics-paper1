@@ -1,15 +1,17 @@
-# 去混杂分解：厂商效应 vs 采集协议效应
+# Deconfounding decomposition: vendor effect versus acquisition-protocol effect
 
-对每个组学特征拟合 `z(feature) ~ 厂商 + 2D/3D + 层厚 + TR + TE + TI + 面内像素间距`，对厂商项做 BH-FDR，并与"仅厂商"的 Kruskal–Wallis 检验配对比较；同时报告双向偏 R²，以及面内像素间距自身的偏 R²。
+For every radiomic feature the script fits `z(feature) ~ vendor + 2D/3D + slice thickness + TR + TE + TI + in-plane pixel spacing`, applies BH-FDR to the vendor term, and compares the result pairwise with the vendor-only Kruskal–Wallis test. It also reports partial R² in both directions and the partial R² of in-plane spacing itself.
 
-**为什么要纳入面内像素间距**：本队列面内间距为 0.34–1.30 mm，与厂商强相关（r = 0.375）。早期版本遗漏该协变量会高估"厂商"的净效应；纳入后厂商 FDR 显著特征由 259（6.2%）升至 362（8.7%），厂商偏 R² 由 0.0164 降至 0.0117，而面内间距自身偏 R² 仅 0.0081（其信息大部分已被既有采集协变量吸收）。结论不变。
+**Why in-plane pixel spacing is included**: in-plane spacing in this cohort ranges from 0.34 to 1.30 mm and is strongly correlated with vendor (r = 0.375). Omitting the covariate, as an earlier version did, overstates the net vendor effect; with it included, the number of FDR-significant features rises from 259 (6.2%) to 362 (8.7%), the vendor partial R² falls from 0.0164 to 0.0117, and the partial R² of in-plane spacing itself is only 0.0081, most of its information having already been absorbed by the existing acquisition covariates. The conclusion is unchanged.
 
-**协变量来源**：该特征实际所在序列的逐例 DICOM 实测参数（补充表 `S1b_paper1_per_case.csv`）。面内间距取行/列间距均值。
+> Which number is quoted: the manuscript, Table S4 and Figure S4 use the **five-covariate registered specification** (vendor + 2D/3D + slice thickness + TR + TE + TI), which gives 259 (6.2%). The six-covariate model above is a **sensitivity analysis** and is written to the `sensitivity_inplane_covariate` block of the output.
 
-**队列**：按**厂商**排除 United Imaging 单例（n = 1，无法作平台层面推断），保证 n = 89 与稿件一致——按厂商而非按姓名排除，以免姓名脱敏后失效。
+**Where the covariates come from**: the per-case DICOM-measured parameters of the sequence the feature actually belongs to (Supplementary Table `S1b_paper1_per_case.csv`). In-plane spacing is the mean of the row and column spacing.
+
+**Cohort**: the single United Imaging case (n = 1, no platform-level inference possible) is excluded **by vendor**, which keeps n = 89 in line with the manuscript. Excluding by name would break once names are pseudonymised.
 
 Entry point: `deconfound_vendor_vs_protocol.py`
 
-## 本目录文件
+## Files in this folder
 
 - `deconfound_vendor_vs_protocol.py`

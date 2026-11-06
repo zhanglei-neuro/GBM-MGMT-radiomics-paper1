@@ -1,8 +1,7 @@
 # -*- coding: utf-8 -*-
-r"""
-计算每例的各亚区体积 (mL) —— 供 Figure S2 / Table S3 使用。
-队列 = analysis/predictions.csv 的患者名单（即 Paper 1 主分析队列，n=89）
-输出: analysis/per_case_volumes.csv
+r"""Compute the subregion volumes (mL) for every case -- used by Figure S2 and Table S3.
+Cohort = the patients listed in analysis/predictions.csv (i.e. the Paper 1 primary analysis cohort, n=89).
+Output: analysis/per_case_volumes.csv
 """
 import os
 import numpy as np
@@ -11,11 +10,11 @@ import nibabel as nib
 
 import sys as _sys
 _sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'tools'))
-from patient_ids import to_id, to_name   # noqa: E402  患者编号 <-> 本地姓名
+from patient_ids import to_id, to_name   # noqa: E402  patient ID <-> local name
 
 BASE = r'D:/WorkBuddy/2026-10-06-10-35-00/outputs/paper1'
 MAIN = r'D:/Raidionics_data/patients/2'          # TumorCore / Edema / FLAIRChanges / Brain
-NEC = r'D:/Raidionics_data/patients_nec2/2'      # Necrosis (修复后)
+NEC = r'D:/Raidionics_data/patients_nec2/2'      # Necrosis (after repair)
 
 
 def find(dd, kw):
@@ -27,13 +26,13 @@ def find(dd, kw):
 
 
 pred = pd.read_csv(os.path.join(BASE, 'analysis', 'predictions.csv'), encoding='utf-8-sig')
-pts = sorted(str(to_id(p)) for p in pred.patient.astype(str).tolist())   # 输出键统一为 Pxxx
+pts = sorted(str(to_id(p)) for p in pred.patient.astype(str).tolist())   # output keys are always Pxxx
 print('cohort from predictions.csv: n =', len(pts))
 
 rows = []
 for pt in pts:
     rec = {'patient': pt}
-    dn = to_name(pt)          # 数据键为 Pxxx，影像目录名用本地姓名
+    dn = to_name(pt)          # data keys are Pxxx, image directories use the local name
     for k, dd, kw in [('TC', MAIN, 'annotation-Tumor_MRI_TumorCore'),
                       ('ED', MAIN, 'annotation-Edema'),
                       ('FL', MAIN, 'annotation-FLAIRChanges'),

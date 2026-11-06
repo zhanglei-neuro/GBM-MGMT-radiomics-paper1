@@ -1,8 +1,8 @@
-# 厂商鲁棒性 (Vendor robustness)
+# Vendor robustness
 
-GE 亚组 (n=32) 的逐折诊断：训练/测试类别分布、逐折 AUC 与方向、内层筛选方向的稳定性；以及 100 次标签置换零分布，用于判断亚组内低于随机水平的 AUC 是否可由随机波动解释。
+Fold-by-fold diagnostics inside the GE subgroup (n = 32): class distribution in the training and test folds, per-fold AUC and direction, and the stability of the inner-screening direction; plus a 100-permutation label-shuffle null distribution, used to judge whether the below-chance AUC inside the subgroup can be put down to random fluctuation.
 
-## 本目录文件
+## Files in this folder
 
 - `ge_subgroup_fold_diagnostics.py`
 - `ge_subgroup_permutation_null.py`

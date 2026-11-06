@@ -1,11 +1,12 @@
 # -*- coding: utf-8 -*-
-r"""批处理启动包装：Necrosis t1c 重跑，stdout/stderr 同时写入 run_necrosis_batch.log。
+r"""Batch launcher: Necrosis rerun on t1c, with stdout/stderr also written to run_necrosis_batch.log.
 
-与直接将 necrosis_rerun.py 作为计划任务目标的区别：
-  - 设置 RAIDIONICS_NO_PATCH=1，关闭 necrosis_rerun.py 内的"改名代替删除"补丁
-    （计划任务环境无交互，避免 _trash_ 目录堆积）；
-  - 限制 BLAS 线程数（4），避免多进程环境下的线程争抢；
-  - 用 Tee 把全部输出落盘，便于逐例审计。
+Differs from pointing the scheduled task straight at necrosis_rerun.py:
+  - sets RAIDIONICS_NO_PATCH=1, which turns off the "rename instead of delete" patch
+    inside necrosis_rerun.py (the task scheduler is non-interactive, which avoids a
+    pile-up of _trash_ directories);
+  - caps the BLAS thread count at 4 to avoid thread contention in multi-process runs;
+  - tees all output to disk so every case can be audited individually.
 """
 import os
 import sys
