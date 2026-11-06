@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
-r"""核验 3.8 节两个细节声明（n=89 主分析队列，3D 薄层 59 vs 2D 厚层 30）：
-1) 小坏死灶（<0.1 mL）检出率两组是否相同
-2) 脑掩膜触及扫描 z 向首层/末层边界的例数（按组）
-输出: supplementary/scripts/s38_claims_check.txt
+r"""Verify the two detail claims made in Section 3.8 (n=89 primary analysis cohort; 3D thin-slice 59 vs 2D thick-slice 30):
+1) whether the detection rate of small necrotic foci (<0.1 mL) is the same in the two groups
+2) the number of cases (by group) in which the brain mask reaches the first/last slice along z
+Output: supplementary/scripts/s38_claims_check.txt
 """
 import os
 import glob
@@ -11,7 +11,7 @@ import pandas as pd
 
 import sys as _sys
 _sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'tools'))
-from patient_ids import to_id   # noqa: E402  患者编号 <-> 本地姓名
+from patient_ids import to_id   # noqa: E402  patient ID <-> local name
 import SimpleITK as sitk
 
 OUT = r'D:/WorkBuddy/2026-10-06-10-35-00/outputs/paper1'
@@ -33,8 +33,8 @@ vol['grp'] = np.where(vol.patient.isin(thick), '2D_thick',
 vol = vol[vol.grp != 'other'].copy()
 lines.append('n: %s' % vol.grp.value_counts().to_dict())
 
-# ---- 声明 1: 小坏死灶 (<0.1 mL) 检出率 ----
-# 1 mL = 1000 mm^3; per_case_volumes 的 NE 单位为 mL（与表 S3 一致）
+# ---- Claim 1: detection rate of small necrotic foci (<0.1 mL) ----
+# 1 mL = 1000 mm^3; NE in per_case_volumes is in mL (consistent with Table S3)
 vol['nec_small'] = vol['NE'] < 0.1
 rate = vol.groupby('grp')['nec_small'].agg(['sum', 'count', 'mean'])
 lines.append('\n[claim 1] small-necrosis (<0.1 mL) detection rate')
@@ -43,7 +43,7 @@ for g in ['3D_thin', '2D_thick']:
     s = vol[vol.grp == g]
     lines.append('  %s: %d/%d = %.0f%%' % (g, s.nec_small.sum(), len(s), 100 * s.nec_small.mean()))
 
-# ---- 声明 2: 脑掩膜触及 z 向首层/末层 ----
+# ---- Claim 2: brain mask reaches the first/last slice along z ----
 lines.append('\n[claim 2] brain mask touching first/last z slice')
 
 

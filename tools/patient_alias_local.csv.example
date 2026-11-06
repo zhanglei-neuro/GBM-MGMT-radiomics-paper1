@@ -1,5 +1,5 @@
 clinical_name,patient_id_public
-# 临床表 GBM_clinical_data.xlsx 的 Name 列与影像队列目录名拼写不一致的病例。
-# 每行两条：临床表拼写, 去标识编号。例如：
-# <ClinicalSpelling>,Pxxx
-# 本文件只含"拼写变体 + 编号"，不含姓名，可随仓库发布；缺省为空。
+# Cases where the Name column of GBM_clinical_data.xlsx is spelled differently from the
+# imaging cohort folder name. Two fields per row: clinical spelling, de-identified ID. For example:/n# <ClinicalSpelling>,Pxxx
+# This file contains spelling variants plus IDs only, no names, so it may be published with the
+# repository; the default is empty.

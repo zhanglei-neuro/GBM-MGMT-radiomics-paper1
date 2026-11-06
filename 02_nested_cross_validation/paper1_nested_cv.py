@@ -1,18 +1,15 @@
 # -*- coding: utf-8 -*-
 r"""
-Paper 1 - 完整分析脚本
-题目: Multivendor MRI radiomics for predicting MGMT promoter methylation in
-      glioblastoma using fully automated deep-learning segmentation:
-      a cautionary negative-result study
-
-运行: D:\Anaconda\python.exe  (numpy 1.26.4 / sklearn 1.5.1 / xgboost 3.4.1 /
-      shap 0.46.0 / neuroCombat 0.2.12)
-
-产出: analysis/*.json, analysis/*.csv, figures/*.png
+Paper 1 - complete analysis script
+Title: Multivendor MRI radiomics for predicting MGMT promoter methylation in
+       glioblastoma
+Run with: D:\Anaconda\python.exe  (numpy 1.26.4 / sklearn 1.5.1 / xgboost 3.4.1 /
+          neuroCombat 0.2.12)
+Outputs: analysis/*.json, analysis/*.csv, figures/*.png
 """
 import os as _os, sys as _sys
 _sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), '..', 'tools'))
-from patient_ids import to_id   # noqa: E402  患者编号 <-> 本地姓名
+from patient_ids import to_id   # noqa: E402  patient code <-> local name
 import os, json, warnings, sys
 import numpy as np
 import pandas as pd
@@ -40,7 +37,7 @@ ANA   = os.path.join(OUT, 'analysis')
 FIG   = os.path.join(OUT, 'figures')
 os.makedirs(ANA, exist_ok=True); os.makedirs(FIG, exist_ok=True)
 SEED  = 42
-REPEATS = 5          # 重复分层 5 折 CV 的重复次数
+REPEATS = 5          # number of repeats for the repeated stratified 5-fold CV
 NSPLIT  = 5
 
 plt.rcParams.update({'font.family': 'DejaVu Sans', 'font.size': 10,
@@ -50,20 +47,21 @@ plt.rcParams.update({'font.family': 'DejaVu Sans', 'font.size': 10,
 def log(*a):
     print(*a, flush=True)
 
-# ============================ 1. 数据装载 ============================
+# ============================ 1. load data ============================
 log('='*70); log('[1] loading'); log('='*70)
 df = pd.read_csv(os.path.join(SRC, 'scripts', 'radiomics_features_long.csv'), encoding='utf-8-sig')
 df['feat'] = df['roi'] + '|' + df['seq'] + '|' + df['feature']
 Xall = df.pivot_table(index='patient', columns='feat', values='value', aggfunc='first')
-Xall.index = [to_id(p) for p in Xall.index]        # 数据键统一为 Pxxx
+Xall.index = [to_id(p) for p in Xall.index]        # all data keys are Pxxx
 co = pd.read_csv(os.path.join(SRC, 'scripts', 'cohort_MGMT.csv'), encoding='utf-8-sig')
 co['y'] = co['MGMT'].astype(str).str.strip().map(lambda s: 1 if s.startswith('+') else 0)
 co = co.set_index('patient')
 co.index = [to_id(p) for p in co.index]
 common = [p for p in co.index if p in Xall.index]
-# 2026-10-09 用户确认: 排除 United Imaging 1.5T 单例 (P021, 见稿件 3.8)
-#   理由: n=1 无法作平台层面推断; ComBat 单例 batch 无法估计批参数; 敏感性分析证实剔除后结论不变
-# 按 vendor 判断而非姓名: 发布版数据的患者标识为 Pxxx, 按姓名排除会静默失效并改变 n
+# Confirmed by the authors on 2026-10-09: exclude the single United Imaging 1.5T case (P021, see manuscript 3.8)
+#   Reason: n=1 permits no platform-level inference; a one-case ComBat batch cannot estimate batch parameters; and the
+#   sensitivity analysis confirmed that removing it leaves the conclusions unchanged.
+# Decided by vendor rather than by name: in the released data patients are Pxxx, so excluding by name fails silently and changes n.
 common = [p for p in common if str(co.loc[p, 'vendor']).strip() != 'UIH']
 X = Xall.loc[common].copy(); y = co.loc[common, 'y'].values
 vendor = co.loc[common, 'vendor'].values
@@ -72,15 +70,15 @@ male = co.loc[common, 'gender'].astype(str).str.strip().eq('M').astype(int).valu
 log('N=%d  MGMT+ %d / MGMT- %d' % (len(y), int(y.sum()), int((1-y).sum())))
 log('vendors: %s' % dict(pd.Series(vendor).value_counts()))
 
-# 标签无关全局预处理
+# label-agnostic global pre-processing
 miss = X.isna().mean(); X = X[miss[miss <= 0.20].index]
 vv = X.var(); X = X[vv[vv > 1e-12].index]
 log('features after missing/zero-variance filter: %d' % X.shape[1])
 n_feat_all = X.shape[1]
 
-# ============================ 2. 通用建模组件 ============================
+# ============================ 2. shared modelling components ============================
 def inner_select(Xtr, ytr, max_feat=200, corr_th=0.90, max_keep=40):
-    """内层: 单变量AUC排序 -> 贪心去相关 -> 至多 max_keep 个特征"""
+    """Inner loop: rank by univariable AUC -> greedy de-correlation -> at most max_keep features"""
     auc = {}
     for c in Xtr.columns:
         v = Xtr[c].values
@@ -140,7 +138,7 @@ def youden(y_, p_):
             'spec': float(tn/max(tn+fp,1)), 'acc': float((tp+tn)/len(y_))}
 
 def rep_nested(name, X_, y_, repeats=REPEATS, seed=SEED):
-    """重复分层5折嵌套CV -> 返回各重复 pooled OOF 概率与 AUC 列表"""
+    """Repeated stratified 5-fold nested CV -> returns the pooled OOF probabilities and the AUC list for each repeat"""
     aucs, probs, feat_sets = [], [], []
     for r in range(repeats):
         skf = StratifiedKFold(n_splits=NSPLIT, shuffle=True, random_state=seed + r)
@@ -161,7 +159,7 @@ def boot_ci(y_, p_, n=2000, seed=SEED):
         a.append(roc_auc_score(y_[idx], p_[idx]))
     return float(np.percentile(a, 2.5)), float(np.percentile(a, 97.5))
 
-# ============================ 3. 主分析: 嵌套CV ============================
+# ============================ 3. main analysis: nested CV ============================
 log('='*70); log('[3] main nested CV (no vendor pre-filtering), repeats=%d' % REPEATS); log('='*70)
 _cache_m = os.path.join(ANA, 'metrics_main.json')
 _cache_p = os.path.join(ANA, 'predictions.csv')
@@ -170,7 +168,7 @@ oof = pd.DataFrame({'patient': X.index, 'y': y, 'vendor': vendor})
 if os.environ.get('REUSE_MAIN', '0') == '1' and os.path.exists(_cache_m) and os.path.exists(_cache_p):
     main = json.load(open(_cache_m))
     _cc = pd.read_csv(_cache_p, encoding='utf-8-sig')
-    _cc['patient'] = [to_id(p) for p in _cc['patient']]   # 落盘表统一归一化为 Pxxx
+    _cc['patient'] = [to_id(p) for p in _cc['patient']]   # written tables are normalised to Pxxx
     oof = _cc.set_index('patient').loc[X.index]
     oof = oof.reset_index()
     log('  [reuse] main CV loaded from cache: %s' % list(main.keys()))
@@ -188,7 +186,7 @@ else:
         log('  %-13s AUC=%.3f +/- %.3f (95%%CI %.3f-%.3f)  Acc=%.3f' %
             (name, met['auc'], met['auc_sd'], lo, hi, met['acc']))
 
-    # 临床基线
+# clinical baseline
     Xcl = pd.DataFrame({'age': age, 'male': male}, index=X.index)
     acls = []
     for r in range(REPEATS):
@@ -206,7 +204,7 @@ else:
     log('  %-13s AUC=%.3f +/- %.3f (95%%CI %.3f-%.3f)' %
         ('clinical', main['clinical']['auc'], main['clinical']['auc_sd'], cl_lo, cl_hi))
 
-    # 临床 + 影像 联合 (logistic)
+# clinical + imaging combined (logistic)
     Xcomb = pd.concat([X, Xcl], axis=1)
     aucs_c, probs_c, _ = rep_nested('logistic', Xcomb, y)
     pc = np.mean(probs_c, axis=0); c_lo, c_hi = boot_ci(y, pc)
@@ -218,7 +216,7 @@ else:
     json.dump(main, open(_cache_m, 'w'), indent=2)
     oof.to_csv(_cache_p, index=False, encoding='utf-8-sig')
 
-# ============================ 4. 厂商鲁棒性 ============================
+# ============================ 4. vendor robustness ============================
 log('='*70); log('[4] vendor robustness: LOVO + within-vendor'); log('='*70)
 ven = {}
 # LOVO
@@ -242,7 +240,7 @@ for v in ['Siemens', 'GE', 'UIH']:
          ('%.3f' % xg) if xg is not None else 'NA'))
 ven['lovo'] = lovo
 
-# 单厂商内部
+# within a single vendor
 within = {}
 for v in ['Siemens', 'GE']:
     m = vendor == v
@@ -262,7 +260,7 @@ ven['within'] = within
 json.dump(ven, open(os.path.join(ANA, 'metrics_vendor.json'), 'w'), indent=2)
 oof.to_csv(os.path.join(ANA, 'predictions.csv'), index=False, encoding='utf-8-sig')
 
-# ============================ 5. 特征层面厂商差异 ============================
+# ============================ 5. vendor differences at feature level ============================
 log('='*70); log('[5] feature-level vendor differences (KW + BH-FDR)'); log('='*70)
 ms, mg = vendor == 'Siemens', vendor == 'GE'
 kw_p, kw_eff = {}, {}
@@ -271,7 +269,7 @@ for c in X.columns:
     if len(a) > 5 and len(b) > 5:
         try:
             kw_p[c] = stats.kruskal(a, b).pvalue
-            # 效应量 rank-biserial 近似: 1 - 2U/(n1*n2)
+# rank-biserial effect size approximation: 1 - 2U/(n1*n2)
             u = stats.mannwhitneyu(a, b, alternative='two-sided').statistic
             kw_eff[c] = 1 - 2 * u / (len(a) * len(b))
         except Exception:
@@ -292,7 +290,7 @@ log('  tested=%d  raw p<0.05=%d (%.1f%%)  BH q<0.05=%d (%.1f%%)  q<0.01=%d' %
     (n, fdr['raw_p05'], 100*fdr['raw_p05']/n, fdr['q05'], fdr['q05_pct'], fdr['q01']))
 json.dump(fdr, open(os.path.join(ANA, 'metrics_feature_fdr.json'), 'w'), indent=2)
 
-# ============================ 6. ROI x SEQ 分层 ============================
+# ============================ 6. ROI x SEQ strata ============================
 log('='*70); log('[6] ROI x SEQ stratified AUC'); log('='*70)
 roi_res = {}
 for roi in ['TumorCore', 'Necrosis', 'Edema', 'FLAIRChanges']:
@@ -306,16 +304,16 @@ for roi in ['TumorCore', 'Necrosis', 'Edema', 'FLAIRChanges']:
         log('  %-22s nfeat=%4d  AUC=%.3f+/-%.3f' % (roi+'|'+seq, len(cols), np.mean(a), np.std(a)))
 json.dump(roi_res, open(os.path.join(ANA, 'metrics_roi.json'), 'w'), indent=2)
 
-# ============================ 7. ComBat 调和 ============================
+# ============================ 7. ComBat harmonisation ============================
 log('='*70); log('[7] ComBat harmonisation (neuroCombat)'); log('='*70)
 combat_res = {}
 try:
     from neuroCombat import neuroCombat, neuroCombatFromTraining
-    keep = vendor != 'UIH'          # UIH n=1 无法估计批参数
+    keep = vendor != 'UIH'          # a single UIH case cannot support batch-parameter estimation
     Xc = X.loc[keep].copy(); yc = y[keep]; vc = vendor[keep]
 
     def combat_pair(Xtr_, vtr_, Xte_, vte_):
-        """训练折拟合 ComBat -> 用训练估计变换测试折(无参数泄漏)"""
+        """Fit ComBat in the training folds -> transform the test fold with the training estimates (no parameter leakage)"""
         med = Xtr_.median()
         Atr = Xtr_.fillna(med)
         est = neuroCombat(dat=Atr.T.values.astype(np.float64),
@@ -330,7 +328,7 @@ try:
             Bte = Ate
         return Btr, Bte
 
-    # 7a. 嵌套CV (每折内拟合 -> 测试折用训练估计变换)
+# 7a. nested CV (fit inside each fold -> test fold transformed with the training estimates)
     def rep_nested_combat(name, X_, y_, v_, repeats=REPEATS):
         aucs, probs = [], []
         for r in range(repeats):
@@ -346,7 +344,7 @@ try:
         a, pr = rep_nested_combat(name, Xc, yc, vc)
         combat_res[name] = {'auc': float(np.mean(a)), 'sd': float(np.std(a))}
         log('  ComBat nested CV %-9s AUC=%.3f+/-%.3f' % (name, np.mean(a), np.std(a)))
-    # 7b. 调和效果: 调和后特征层面厂商差异
+# 7b. effect of harmonisation: vendor differences at feature level afterwards
     med_all = Xc.median()
     est_all = neuroCombat(dat=Xc.fillna(med_all).T.values.astype(np.float64),
                           covars=pd.DataFrame({'vendor': vc}), batch_col='vendor')
@@ -361,7 +359,7 @@ try:
                               'before_q05': int((qser < 0.05).sum())}
     log('  after ComBat: vendor-significant features %d / %d (before raw %d / FDR %d)' %
         (kw_after, Xc.shape[1], int((ps < 0.05).sum()), int((qser < 0.05).sum())))
-    # 7c. ComBat 后 LOVO (用全局估计: ComBat 固有地需要目标批数据 -> 需说明)
+# 7c. LOVO after ComBat (using global estimates: ComBat inherently needs target-batch data, which has to be stated)
     lovo_h = {}
     for v in ['Siemens', 'GE']:
         te = vc == v; tr = ~te
@@ -373,7 +371,7 @@ try:
         lovo_h[v] = {'n_test': int(te.sum()), 'auc': float(roc_auc_score(yc[te], p))}
         log('  ComBat LOVO -> %-8s n=%2d AUC=%.3f' % (v, te.sum(), lovo_h[v]['auc']))
     combat_res['lovo'] = lovo_h
-    # 7d. per-vendor z-score (VWS) 对照
+# 7d. per-vendor z-score (VWS) comparator
     vws = {}
     for v in ['Siemens', 'GE']:
         te = vc == v; tr = ~te

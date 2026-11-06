@@ -1,10 +1,10 @@
-# 特征提取与数据准备 (Feature extraction & data preparation)
+# Feature extraction and data preparation
 
-从原始术前 DICOM 到 PyRadiomics 特征矩阵的全过程：DICOM 清单扫描 → 序列角色判定 (T1c 依据 `ContrastBolusAgent = Gd-DTPA`) → DICOM→NIfTI 转换 → 队列锁定与掩码齐全度校验 → 4148 维特征提取（Python 3.9 / pyradiomics 3.1.0，固定 bin 宽 25，不做强度归一化）。
+The whole path from raw pre-operative DICOM to the PyRadiomics feature matrix: DICOM inventory scan → series-role assignment (T1c identified by `ContrastBolusAgent = Gd-DTPA`) → DICOM→NIfTI conversion → cohort locking and mask-completeness checks → extraction of the 4148 features (Python 3.9 / pyradiomics 3.1.0, fixed bin width 25, no intensity normalisation).
 
 Entry point: `extract_features_pyradiomics.py`
 
-## 本目录文件
+## Files in this folder
 
 - `build_cohort.py`
 - `build_vendor_map.py`
@@ -13,18 +13,18 @@ Entry point: `extract_features_pyradiomics.py`
 - `scan_dicom_inventory.py`
 - `select_series_roles.py`
 
-### Necrosis 通道重跑（主批跑后的必要补救）
+### Re-running the necrosis channel (a repair the main batch made necessary)
 
-主批跑中 Raidionics 的 `MRI_Necrosis` 模型自动选型按变体名长度取最后一个匹配项；当输入缺少 t1d 序列时，选型落到 `t1c_t1w_t2f_t1d` 四序列变体，**静默输出空掩膜**（全部 90 例 Necrosis 掩膜体素数为 0，且进程返回码为 0、日志无报错）。因此主结果树的 Necrosis 通道不可用，须按下述流程重跑。
+In the main batch, Raidionics' automatic variant selection for the `MRI_Necrosis` model took the last match by variant-name length. When the input lacked a t1d sequence the selection fell through to the four-sequence `t1c_t1w_t2f_t1d` variant and **silently wrote empty masks**: all 90 Necrosis masks had zero voxels, while the process still returned 0 and the log showed no error. The necrosis channel in the main results tree is therefore unusable and has to be re-run as described below.
 
-- `necrosis_rerun.py` — 单序列 (t1c) 变体重跑主脚本。搭建仅含 `t1c` 子目录的暂存模型库 `models_nec_t1c/`，强制选型命中单序列变体；输出写入**独立目录** `patients_nec2/`，不触碰已验证的主结果树；支持断点续跑（输出 `T0/` 下已有 `*Necrosis*.nii.gz` 的病例跳过）。
-  用法：`python necrosis_rerun.py [--only <patient>]`
-- `necrosis_t1c_pipeline.json` — 单步管线定义（仅 Model selection，`MRI_Necrosis`，thresholding 重建），由脚本运行时读取。
-- `necrosis_config_template.ini` — Raidionics 运行时配置模板（`gpu_id=-1`、`acceleration=cpu`、`reconstruction_order=resample_first`）。占位符 `<WORK_ROOT>` / `<SCRIPT_DIR>` 由运行环境替换；脚本会按病例自动生成实际配置。
-- `run_necrosis_batch.py` — 批处理启动包装：关闭重跑脚本内的改名补丁、限制 BLAS 线程数、把全部输出 tee 到 `run_necrosis_batch.log`。
-- `necrosis_check.py` — 空掩码核查工具。统计各亚区（TumorCore / Necrosis / Edema / FLAIRChanges）的标签取值与非零体素数，用于判定某一通道是否整体失效。
-  用法：`python necrosis_check.py <segmentation_tree> [report.txt]`
+- `necrosis_rerun.py` — re-run driver for the single-sequence (t1c) variant. It builds a staging model library `models_nec_t1c/` containing only a `t1c` subdirectory, which forces variant selection onto the single-sequence variant, and writes output to a **separate directory** `patients_nec2/` without touching the validated main results tree. It resumes where it left off: cases that already have a `*Necrosis*.nii.gz` under `T0/` are skipped.
+  Usage: `python necrosis_rerun.py [--only <patient>]`
+- `necrosis_t1c_pipeline.json` — single-step pipeline definition (model selection only, `MRI_Necrosis`, thresholding reconstruction), read by the script at run time.
+- `necrosis_config_template.ini` — Raidionics run-time configuration template (`gpu_id=-1`, `acceleration=cpu`, `reconstruction_order=resample_first`). The placeholders `<WORK_ROOT>` and `<SCRIPT_DIR>` are substituted by the run environment; the script generates the actual configuration per case.
+- `run_necrosis_batch.py` — batch launcher: it disables the rename patch inside the re-run script, caps the BLAS thread count, and tees all output to `run_necrosis_batch.log`.
+- `necrosis_check.py` — empty-mask checker. It counts label values and non-zero voxels per subregion (TumorCore / Necrosis / Edema / FLAIRChanges), which is how a wholesale channel failure is detected.
+  Usage: `python necrosis_check.py <segmentation_tree> [report.txt]`
 
-**结果（n=90）**：重跑后 84/90 例检出坏死区（中位 4.4 mL），6 例为真实无坏死（非技术失败），与主批跑 90/90 全空形成对照。
+**Result (n = 90)**: after the re-run, 84/90 cases had a detected necrotic region (median 4.4 mL) and 6 genuinely had none (not a technical failure), against 90/90 empty in the main batch.
 
-> ⚠️ **数据保护说明**：`necrosis_rerun.py` 在导入时对 `shutil.rmtree` / `os.remove` / `os.rmdir` 打补丁，将删除操作改为**重命名**（`*_trash_<pid>_<seq>`），以避免 Raidionics 内部清理逻辑误删已验证数据。设置环境变量 `RAIDIONICS_NO_PATCH=1` 可恢复原生行为（`run_necrosis_batch.py` 即采用此模式）。该补丁只改名、不删除，但会在输出树留下 `_trash_*` 目录，可用后自行清理。
+> ⚠️ **Data-protection note**: on import, `necrosis_rerun.py` patches `shutil.rmtree`, `os.remove` and `os.rmdir` so that deletions become **renames** (`*_trash_<pid>_<seq>`), which stops Raidionics' internal cleanup from deleting validated data by mistake. Setting `RAIDIONICS_NO_PATCH=1` restores native behaviour, and that is the mode `run_necrosis_batch.py` uses. The patch only renames and never deletes, but it does leave `_trash_*` directories in the output tree, which you can remove yourself afterwards.

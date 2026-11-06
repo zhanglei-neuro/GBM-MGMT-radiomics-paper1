@@ -1,16 +1,16 @@
 # -*- coding: utf-8 -*-
-r"""
-Supplementary S3 / Figure S2 -- 采集几何（层厚）对 Raidionics 分割的影响
-A) 矢状位重建（同一物理 mm 视野）：3D 各向同性 (1 mm) vs 2D 厚层 (5 mm)，叠加亚区掩膜
-B) 全脑掩膜体积按采集几何分组（OLS 校正年龄/性别）
-C) 坏死灶 / (肿瘤核心+坏死) 比例（部分容积最敏感指标）
-D) z 向覆盖 vs 层厚
-输出: supplementary/figures/FigureS2_slice_thickness.png
-      supplementary/tables/S3_slice_thickness.csv (+ .md)
+r"""Supplementary S3 / Figure S2 -- effect of acquisition geometry (slice thickness) on Raidionics segmentation
+
+A) Sagittal reconstruction (same physical field of view in mm): 3D isotropic (1 mm) vs 2D thick-slice (5 mm), with
+   the subregion masks overlaid
+B) Whole-brain mask volume grouped by acquisition geometry (OLS adjusted for age and sex)
+C) Necrosis / (tumour core + necrosis) ratio, the metric most sensitive to partial volume
+D) z-axis coverage vs slice thickness
+Output: supplementary/figures/FigureS2_slice_thickness.png
 """
 import os as _os, sys as _sys
 _sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), '..', 'tools'))
-from patient_ids import to_name, to_id   # noqa: E402  患者编号 <-> 本地姓名
+from patient_ids import to_name, to_id   # noqa: E402  patient code <-> local name
 import os
 import numpy as np
 import pandas as pd
@@ -32,7 +32,7 @@ plt.rcParams.update({'font.family': 'DejaVu Sans', 'font.size': 9,
                      'axes.spines.top': False, 'axes.spines.right': False,
                      'savefig.dpi': 300, 'figure.dpi': 120})
 
-# 键为患者目录名（以姓名命名），由去标识编号经 to_name() 还原
+# keys are patient directory names (named after the patient), recovered from the de-identified code via to_name()
 CASES = [(to_name('P098'), 'Siemens Verio 3.0 T | 3D MP-RAGE\n1.0 x 1.0 x 1.0 mm', 'thin'),
          (to_name('P010'), 'Siemens Verio 3.0 T | 2D T1-TIRM\n0.34 x 0.34 x 5.0 mm (6 mm spacing)', 'thick')]
 
@@ -59,7 +59,7 @@ def get(pat):
 
 fig = plt.figure(figsize=(10.2, 6.6))
 gs = fig.add_gridspec(2, 3, height_ratios=[1.35, 1.0], hspace=0.40, wspace=0.32)
-YW, ZW = 95.0, 62.0      # 共同物理视野 (mm): y ±95, z ±62
+YW, ZW = 95.0, 62.0      # shared physical field of view (mm): y +/-95, z +/-62
 
 for i, (pat, lab, grp) in enumerate(CASES):
     D = get(pat)
@@ -121,9 +121,9 @@ axL.text(0.5, 0.58,
 
 # ---------------- B / C / D ----------------
 v = pd.read_csv(os.path.join(BASE, 'analysis/per_case_volumes.csv'))
-v['patient'] = [to_id(p) for p in v['patient']]     # 落盘表统一归一化为 Pxxx
+v['patient'] = [to_id(p) for p in v['patient']]     # written tables are normalised to Pxxx
 s1b = pd.read_csv(os.path.join(SUP, 'tables/S1b_paper1_per_case.csv'))
-s1b['Patient'] = [to_id(p) for p in s1b['Patient']]   # 落盘表统一归一化为 Pxxx
+s1b['Patient'] = [to_id(p) for p in s1b['Patient']]   # written tables are normalised to Pxxx
 t = s1b[s1b['Sequence role'] == 'T1C'].copy()
 t['th'] = pd.to_numeric(t['Slice thickness (mm)'], errors='coerce')
 geo = pd.read_csv(os.path.join(SUP, 'logs/s1_paper1_geometry_check.csv'))
@@ -189,7 +189,7 @@ out = os.path.join(FIGD, 'FigureS2_slice_thickness.png')
 fig.savefig(out, bbox_inches='tight'); plt.close(fig)
 print('saved', out)
 
-# ---------------- 表 S3 ----------------
+# ---------------- Table S3 ----------------
 def iqr(x):
     return '%.2f [%.2f-%.2f]' % (x.median(), x.quantile(.25), x.quantile(.75))
 

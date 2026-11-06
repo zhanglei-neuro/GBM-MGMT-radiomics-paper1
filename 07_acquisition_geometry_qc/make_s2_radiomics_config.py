@@ -2,9 +2,9 @@
 r"""
 Table S2 — PyRadiomics feature extraction configuration (as actually applied in Paper 1).
 
-配置事实来自两处可核查来源:
-  1) 提取脚本  C:\Users\zhanglei\WorkBuddy\2026-09-18-22-15-57\scripts\extract_features.py
-  2) 已产出的特征长表 radiomics_features_long.csv（用于反向核对每个类别的特征计数）
+The configuration facts come from two checkable sources:
+  1) the extraction script  C:\Users\zhanglei\WorkBuddy\2026-09-18-22-15-57\scripts\extract_features.py
+  2) the feature long table already produced, radiomics_features_long.csv (used to check each class count in reverse)
 """
 import os
 import re
@@ -14,7 +14,7 @@ PROD = r'C:\Users\zhanglei\WorkBuddy\2026-09-18-22-15-57\scripts'
 OUT = r'D:\WorkBuddy\2026-10-06-10-35-00\outputs\paper1\supplementary\tables'
 os.makedirs(OUT, exist_ok=True)
 
-# ---------- 从特征表反向核对各类别计数 ----------
+# ---------- check each class count against the feature table ----------
 feat = pd.read_csv(os.path.join(PROD, 'radiomics_features_long.csv'))
 
 
@@ -34,14 +34,14 @@ def img_of(f):
 
 feat['cls'] = feat.feature.map(cls_of)
 feat['img'] = feat.feature.map(img_of)
-# 注意: nunique 统计的是"全部像型合计"的唯一特征名，需除以波段数还原每像型的类别计数
+# note: nunique counts unique feature names pooled over all image types, so divide by the number of image types to recover the per-image-type class count
 n_bands = feat[feat.img.str.startswith('wavelet')].img.nunique()          # 8
 n_img_types = 1 + n_bands                                                  # 9
 cnt_all = feat.groupby('cls').feature.nunique().to_dict()
 TEXTURE = ['firstorder', 'glcm', 'glrlm', 'glszm', 'gldm', 'ngtdm']
 cnt = {c: cnt_all[c] // n_img_types for c in TEXTURE if c in cnt_all}
 cnt['shape'] = cnt_all.get('shape (3D)', 0)
-n_basic = sum(cnt[c] for c in TEXTURE)                                     # 每像型 93
+n_basic = sum(cnt[c] for c in TEXTURE)                                     # 93 per image type
 per_pair = feat.groupby(['roi', 'seq']).feature.nunique()
 
 assert n_basic == 93, n_basic
@@ -52,7 +52,7 @@ NAME = {'firstorder': 'First order', 'glcm': 'GLCM (grey level co-occurrence)',
         'gldm': 'GLDM (dependence)', 'ngtdm': 'NGTDM (neighbouring grey tone)',
         'shape': 'Shape (3D)'}
 band_order = ['Original'] + ['wavelet-' + b for b in ['LLL', 'LLH', 'LHL', 'LHH', 'HLL', 'HLH', 'HHL', 'HHH']]
-# ---------- S2a: 提取设置 ----------
+# ---------- S2a: extraction settings ----------
 n_img_types = 1 + len([x for x in feat.img.unique() if x.startswith('wavelet')])
 
 s2a_rows = [
@@ -86,7 +86,7 @@ s2a_rows = [
 ]
 s2a = pd.DataFrame(s2a_rows, columns=['Setting', 'Value', 'Notes'])
 
-# ---------- S2b: 特征类构成 ----------
+# ---------- S2b: feature class composition ----------
 s2b_rows = [('Shape (3D)', cnt.get('shape', 0), 'original only', 'Primary pairings only')]
 for c in ['firstorder', 'glcm', 'glrlm', 'glszm', 'gldm', 'ngtdm']:
     if c in cnt:
@@ -94,7 +94,7 @@ for c in ['firstorder', 'glcm', 'glrlm', 'glszm', 'gldm', 'ngtdm']:
 s2b = pd.DataFrame(s2b_rows, columns=['Feature class', 'N features (per image type)',
                                       'Image types', 'Remarks'])
 
-# ---------- S2c: 像型 × 类别 维度矩阵 ----------
+# ---------- S2c: image type x class dimension matrix ----------
 s2c_rows = []
 for cls in ['shape', 'firstorder', 'glcm', 'glrlm', 'glszm', 'gldm', 'ngtdm']:
     if cls not in cnt:
@@ -113,7 +113,7 @@ tot = pd.DataFrame([{'Feature class': 'TOTAL per (ROI × sequence) pairing',
                      'Row total': sum(v for k, v in cnt.items() if k != 'shape') * n_img_types + cnt.get('shape', 0)}])
 s2c = pd.concat([s2c, tot], ignore_index=True)
 
-# ---------- S2d: ROI × 序列配对与总维度 ----------
+# ---------- S2d: ROI x sequence pairing and total dimension ----------
 PRIMARY = [('TumorCore', 'T1c'), ('Necrosis', 'T1c'), ('Edema', 'FLAIR'), ('FLAIRChanges', 'FLAIR')]
 CROSS = [('TumorCore', 'FLAIR'), ('TumorCore', 'T1w'), ('Necrosis', 'FLAIR'), ('Necrosis', 'T1w'),
          ('Edema', 'T1c'), ('Edema', 'T1w'), ('FLAIRChanges', 'T1c'), ('FLAIRChanges', 'T1w')]
@@ -138,10 +138,10 @@ s2b.to_csv(os.path.join(OUT, 'S2b_feature_class_composition.csv'), index=False, 
 s2c.to_csv(os.path.join(OUT, 'S2c_image_type_matrix.csv'), index=False, encoding='utf-8-sig')
 s2d.to_csv(os.path.join(OUT, 'S2d_roi_sequence_pairing.csv'), index=False, encoding='utf-8-sig')
 
-print('=== S2b 特征类构成 ===')
+print('=== S2b feature class composition ===')
 print(s2b.to_string(index=False))
-print('\n=== S2d 配对与维度 ===')
+print('\n=== S2d pairing and dimensions ===')
 print(s2d.to_string(index=False))
-print('\n总维度校验: 4 x %d + 8 x %d = %d  (期望 4148)' % (prim_dim, cross_dim, 4 * prim_dim + 8 * cross_dim))
-print('每 (roi,seq) 实际计数抽样:')
+print('\ntotal dimension check: 4 x %d + 8 x %d = %d  (expected 4148)' % (prim_dim, cross_dim, 4 * prim_dim + 8 * cross_dim))
+print('sample of the actual count per (roi,seq):')
 print(per_pair.head(12).to_string())

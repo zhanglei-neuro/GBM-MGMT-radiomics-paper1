@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
-r"""根据系列描述推断 MRI 设备厂商 + 与术后真实标签交叉验证。
-映射依据: 术后(NeuroImagepost) 真实 DICOM Manufacturer(0008,0070) 与 SeriesDescription 的对应。
+r"""Infer the MRI scanner vendor from the series description and cross-validate it against the post-operative ground truth.
+
+Basis for the mapping: the correspondence between the true Manufacturer (0008,0070) in the post-operative
+(NeuroImagepost) data and SeriesDescription.
 """
 import csv, os, sys, io, json, glob
 from collections import Counter, defaultdict
@@ -10,14 +12,14 @@ BASE = r'C:\Users\zhanglei\WorkBuddy\2026-09-18-22-15-57'
 SIEMENS, GE, UIH, OTHER = 'Siemens', 'GE', 'UIH', 'Unknown'
 
 RULES = [
-    # ---- Siemens (特异性最高, 必须先判; 含 Siemens 自家灌注参数图 ep2d_perf_*_TTP) ----
+    # ---- Siemens (most specific, so it must be tested first; includes the Siemens perfusion parameter maps ep2d_perf_*_TTP) ----
     ('tirm', SIEMENS), ('qtse', SIEMENS), ('ep2d', SIEMENS), ('tse', SIEMENS),
     ('mprage_sag_p2', SIEMENS), ('aahead', SIEMENS), ('resolve_', SIEMENS),
     ('mpr_sag_fs_iso', SIEMENS), ('dark-fluid', SIEMENS), ('fl2d', SIEMENS),
     ('localizer', SIEMENS), ('mpr range', SIEMENS), ('mpr 1mm range', SIEMENS),
     ('mpr cor 1mm range', SIEMENS), ('mpr thick range', SIEMENS),
     ('abi1_t1iso_mprage', SIEMENS),
-    # ---- UIH 联影 ----
+    # ---- UIH, United Imaging ----
     ('epi_dwi_tra', UIH), ('gre_scout', UIH), ('fse_flair', UIH), ('t2_fse_tra', UIH),
     ('fse_flair_tra_fs', UIH), ('t1_gre_', UIH),
     # ---- GE ----
@@ -96,33 +98,33 @@ def main():
     pre = build_preop()
     post = build_postop_truth()
     out = []
-    out.append('== 术前(本批)厂商推断 ==  共计 %d 例' % len(pre))
+    out.append('== vendor inferred for this pre-operative batch ==  %d cases in total' % len(pre))
     for pat in sorted(pre):
         r = pre[pat]
         flags = []
         if r['minor']:
-            flags.append('次选:' + ','.join('%s(%d)' % (k, len(v)) for k, v in r['minor'].items()))
+            flags.append('second choice:' + ','.join('%s(%d)' % (k, len(v)) for k, v in r['minor'].items()))
         if r['unknown']:
-            flags.append('未识别:' + ','.join(r['unknown']))
-        out.append('%-16s %-9s 序列=%-3d 主证据=%-3d %s' % (
+            flags.append('unrecognised:' + ','.join(r['unknown']))
+        out.append('%-16s %-9s series=%-3d main evidence=%-3d %s' % (
             pat, r['vendor'], r['n_series'], len(r['evidence']), '; '.join(flags)))
     out.append('')
-    out.append('术前分布: %r' % dict(Counter(r['vendor'] for r in pre.values()).most_common()))
+    out.append('pre-operative distribution: %r' % dict(Counter(r['vendor'] for r in pre.values()).most_common()))
     out.append('')
     both = sorted(set(pre) & set(post))
-    out.append('== 交叉验证: 术前推断(命名) vs 术后真实标签 ==  共同 %d 例' % len(both))
+    out.append('== cross-validation: pre-operative inference (naming) vs post-operative truth ==  %d cases in common' % len(both))
     agree = dis = 0
     for pat in both:
         a, b = pre[pat]['vendor'], norm(post[pat])
         ok = (a == b)
         agree += ok
         dis += (not ok)
-        out.append('%-16s 术前推断=%-9s 术后真实=%-9s %s' % (pat, a, b, '✓' if ok else '✗'))
+        out.append('%-16s inferred=%-9s truth=%-9s %s' % (pat, a, b, 'OK' if ok else 'MISMATCH'))
     out.append('')
-    out.append('一致 %d / 不一致 %d / 一致率 %.1f%%' % (agree, dis, 100.0 * agree / max(len(both), 1)))
-    # 仅术后有真值但术前数据不在本批的情况不需要
+    out.append('agree %d / disagree %d / agreement %.1f%%' % (agree, dis, 100.0 * agree / max(len(both), 1)))
+    # no need to handle the case where only post-operative truth exists and the pre-operative data lies outside this batch
     out.append('')
-    out.append('== 每位患者逐系列映射明细 ==')
+    out.append('== per-patient, per-series mapping detail ==')
     rows = list(csv.DictReader(open(os.path.join(BASE, 'scripts', 'dicom_inventory.csv'), encoding='utf-8-sig')))
     byp = defaultdict(list)
     for r in rows:

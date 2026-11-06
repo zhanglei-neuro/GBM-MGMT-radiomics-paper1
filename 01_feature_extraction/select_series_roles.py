@@ -1,14 +1,15 @@
 # -*- coding: utf-8 -*-
-r"""步骤1b: 从 dicom_inventory.csv 重新做角色判定与序列选择 (修正版)
-修正点:
-  - FLAIR 识别: 'flair' / 'dark-fluid' / 'dark_fluid' / ('t2'+'tirm')  (西门子协议 dark-fluid 即 FLAIR)
-  - 排除干扰序列: localizer/scout/灌注(perf)/弥散(adc,diff,trace)/MPR重建/Range
-  - T1-CE 排序: 无缺层 > 层数多(3D优于2D) > 轴位(tra)
-产出: series_selection.csv (每个患者选定的三条序列目录)
+r"""Step 1b: redo the role assignment and series selection from dicom_inventory.csv (corrected version)
+
+Corrections:
+- FLAIR detection: 'flair' / 'dark-fluid' / 'dark_fluid' / ('t2' + 'tirm')   (a Siemens dark-fluid protocol is FLAIR)
+- nuisance series excluded: localizer/scout, perfusion (perf), diffusion (adc, diff, trace), MPR reconstructions, Range
+- T1-CE ranking: no missing slices > more slices (3D over 2D) > axial (tra)
+Output: series_selection.csv (the three series directories chosen for each patient)
 """
 import os as _os, sys as _sys
 _sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), '..', 'tools'))
-from patient_ids import to_name   # noqa: E402  患者编号 <-> 本地姓名
+from patient_ids import to_name   # noqa: E402  patient code <-> local name
 import csv, glob, os, re
 
 SRC = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'dicom_inventory.csv')
@@ -21,7 +22,7 @@ def dl(s):
 
 def excluded(desc):
     d = dl(desc)
-    # GE 序列名 t1_mpr_sag_fs_iso+C 是 3D T1-CE 本体, 不算 MPR 重建
+    # the GE series name t1_mpr_sag_fs_iso+C is a 3D T1-CE in its own right, not an MPR reconstruction
     is_ge_seq = d.startswith('t1_mpr_')
     if not is_ge_seq and (re.search(r'mpr[_ ](cor|tra|sag)', d) or '<mpr' in d):
         return True
@@ -47,7 +48,7 @@ def classify(r):
         return 'other'
     has_t1 = ('t1' in d) or ('mprage' in d)
     if has_t1 and agent:
-        # 铁律: ContrastBolusAgent 非空优先于名字 (GE 的 t1_fse_flair_+c 是增强 T1)
+        # hard rule: a non-empty ContrastBolusAgent beats the name (GE's t1_fse_flair_+c is a contrast-enhanced T1)
         return 't1ce'
     if is_flair_desc(r['desc']) and not agent and not ('t1' in d):
         return 'flair'
@@ -62,8 +63,8 @@ def rank(r):
 def main():
     rows = list(csv.DictReader(open(SRC, encoding='utf-8-sig')))
     patients = sorted(set(r['patient'] for r in rows))
-    # 定向覆盖: t1_mpr_sag_fs_iso+C 混入两个错位体积副本的患者, 改用干净 _ND 变体
-    # 键为去标识编号; 患者目录名以姓名命名, 故路径经 to_name() 还原为本地目录名
+    # targeted override: for the patient whose t1_mpr_sag_fs_iso+C carries two mis-registered volume copies, use the clean _ND variant
+    # keys are de-identified codes; patient directories are named after the patient, so paths go through to_name()
     PRE_ROOT = os.environ.get('PATIENT_ROOT', r'D:\NeuroImagepre')
 
     def _ovr_dir(pid, date, ser):

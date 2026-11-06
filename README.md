@@ -24,7 +24,7 @@ pipeline from DICOM inventory to the final figures and tables.
 | `06_volume_analysis/` | Seven pre-specified volume biomarkers (native-grid voxel counting) and their association with MGMT status |
 | `07_acquisition_geometry_qc/` | Per-case/per-series acquisition parameter tables (Tables S1a–S1c, S2a–S2d, S3) and geometry consistency checks |
 | `08_sensitivity_and_power/` | MDES power analysis (Hanley–McNeil), stronger clinical baselines, cohort- and geometry-stratified sensitivity analyses |
-| `09_figures_and_tables/` | Generation of main Figures 1–8, main Table 1, supplementary Figures S1–S4 and Tables S1–S7 |
+| `09_figures_and_tables/` | Generation of main Figures 1–6 (two of them composites), main Table 1, supplementary Figures S1–S4 and Tables S1–S7 |
 | `10_reporting/` | Markdown → Word rendering of the manuscript and the response letter; revision patches |
 | `tools/` | Safety and reproducibility helpers (see §4) |
 | `tools/patient_ids.py` | Patient-identifier normalisation — **required by most scripts**, see §4 |
@@ -94,7 +94,8 @@ pipeline from DICOM inventory to the final figures and tables.
 ### 09_figures_and_tables
 | Script | Output |
 |---|---|
-| `make_main_figures.py` | Figures 1–8 |
+| `make_main_figures.py` | Source panels of Figures 1, 3, 4 and 6 |
+| `make_composite_main_figures.py` | Composite Figures 2 and 5 |
 | `make_table1_baseline.py` | Table 1 (baseline, by vendor) |
 | `make_supp_tables_S5_S7.py` | Tables S5–S7 |
 | `make_supp_tables_S1_S4.py` | Tables S1–S4 |

@@ -1,10 +1,11 @@
 # -*- coding: utf-8 -*-
-r"""Paper 1 - 论文级图表生成 (读 analysis/ 产物)
-运行: D:\Anaconda\python.exe paper1_plots.py
+r"""Paper 1 - publication-quality figures (reads the products in analysis/)
+
+Run: D:\Anaconda\python.exe paper1_plots.py
 """
 import os as _os, sys as _sys
 _sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), '..', 'tools'))
-from patient_ids import to_id   # noqa: E402  患者编号 <-> 本地姓名
+from patient_ids import to_id   # noqa: E402  patient code <-> local name
 import os, json, warnings
 import numpy as np, pandas as pd
 import matplotlib
@@ -35,24 +36,24 @@ VC = {'Siemens': '#4C72B0', 'GE': '#DD8452', 'UIH': '#55A868'}
 
 def log(*a): print(*a, flush=True)
 
-# ---------- 数据 ----------
+# ---------- data ----------
 df = pd.read_csv(os.path.join(SRC, 'scripts', 'radiomics_features_long.csv'), encoding='utf-8-sig')
 df['feat'] = df['roi'] + '|' + df['seq'] + '|' + df['feature']
 X = df.pivot_table(index='patient', columns='feat', values='value', aggfunc='first')
 co = pd.read_csv(os.path.join(SRC, 'scripts', 'cohort_MGMT.csv'), encoding='utf-8-sig')
 co['y'] = co['MGMT'].astype(str).str.strip().map(lambda s: 1 if s.startswith('+') else 0)
 co = co.set_index('patient')
-co.index = [to_id(p) for p in co.index]            # 数据键统一为 Pxxx
+co.index = [to_id(p) for p in co.index]            # all data keys are Pxxx
 X.index = [to_id(p) for p in X.index]
 common = [p for p in co.index if p in X.index]
-# 排除 United Imaging 1.5T 单例 (见稿件 3.8)。按 vendor 判断而非姓名
-# (发布版数据的患者标识为 Pxxx, 按姓名排除会静默失效并改变 n)
+# Exclude the single United Imaging 1.5T case (see manuscript 3.8). Decided by vendor rather than by name
+# (in the released data patients are Pxxx, so excluding by name fails silently and changes n)
 common = [p for p in common if str(co.loc[p, 'vendor']).strip() != 'UIH']
 X = X.loc[common]; y = co.loc[common, 'y'].values; vendor = co.loc[common, 'vendor'].values
 X = X[X.columns[X.isna().mean() <= 0.20]]; X = X[X.columns[X.var() > 1e-12]]
 pred = pd.read_csv(os.path.join(ANA, 'predictions.csv'), encoding='utf-8-sig')
-pred['patient'] = [to_id(p) for p in pred['patient']]        # 落盘表统一归一化为 Pxxx
-pred = pred.set_index('patient').loc[X.index].reset_index()  # 与 X / y 显式同行序
+pred['patient'] = [to_id(p) for p in pred['patient']]        # written tables are normalised to Pxxx
+pred = pred.set_index('patient').loc[X.index].reset_index()  # force the same row order as X / y
 M = json.load(open(os.path.join(ANA, 'metrics_main.json')))
 VEN = json.load(open(os.path.join(ANA, 'metrics_vendor.json')))
 ROI = json.load(open(os.path.join(ANA, 'metrics_roi.json')))
@@ -68,7 +69,7 @@ pcs = PCA(n_components=2, random_state=SEED).fit_transform(Xs)
 ts = TSNE(n_components=2, perplexity=20, random_state=SEED, init='pca', learning_rate='auto').fit_transform(Xs)
 fig, ax = plt.subplots(2, 2, figsize=(11, 9.5))
 for j, (emb, ttl) in enumerate([(pcs, 'PCA'), (ts, 't-SNE')]):
-    # 厂商着色
+    # coloured by vendor
     for v in ['Siemens', 'GE', 'UIH']:
         m = vendor == v
         if m.sum() == 0: continue
@@ -77,7 +78,7 @@ for j, (emb, ttl) in enumerate([(pcs, 'PCA'), (ts, 't-SNE')]):
     ax[0, j].set_title('%s — coloured by scanner vendor' % ttl, fontweight='bold')
     ax[0, j].legend(frameon=False, fontsize=9)
     ax[0, j].set_xlabel('%s 1' % ttl); ax[0, j].set_ylabel('%s 2' % ttl)
-    # 标签着色
+    # coloured by label
     for lab, c, nm in [(0, '#999999', 'MGMT-unmethylated'), (1, '#C44E52', 'MGMT-methylated')]:
         m = y == lab
         ax[1, j].scatter(emb[m, 0], emb[m, 1], s=42, c=c, label='%s (n=%d)' % (nm, m.sum()),
@@ -250,7 +251,7 @@ ax[0].set_xticks(range(len(seqs))); ax[0].set_xticklabels(seqs)
 ax[0].set_yticks(range(len(rois))); ax[0].set_yticklabels(rois)
 ax[0].set_title('(a) AUC by ROI × sequence (nested CV)', fontweight='bold')
 plt.colorbar(im, ax=ax[0], fraction=.046, label='AUC')
-# 主 combo 柱状
+# bars for the main combinations
 keys = ['TumorCore|T1CE', 'Necrosis|T1CE', 'Edema|FLAIR', 'FLAIRChanges|FLAIR']
 keys = [k for k in keys if k in ROI]
 v = [ROI[k]['auc'] for k in keys]; e = [ROI[k]['sd'] for k in keys]

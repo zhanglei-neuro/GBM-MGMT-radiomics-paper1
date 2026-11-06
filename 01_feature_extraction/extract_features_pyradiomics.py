@@ -1,16 +1,18 @@
 # -*- coding: utf-8 -*-
-r"""阶段1: pyradiomics 特征提取 (在 D:\Anaconda\envs\nnunet 环境运行, python 3.9 + pyradiomics 3.1.0)
+r"""Stage 1: pyradiomics feature extraction (run in the D:\Anaconda\envs\nnunet environment, python 3.9 + pyradiomics 3.1.0)
 
-设计:
-- 全部掩码都在 t1-gd 空间 (Raidionics 输出, 已验证)
-- 序列对齐: t1-gd 用原始; t1w/t2-flair 若与 t1-gd 几何完全一致则用原始,
-  否则用 Raidionics 自带的 ANTs 前向变换重采样到 t1-gd 网格
-  (CompositeTransform([affine, warp]), 已用 MI 校验为最优组合), 结果缓存到 input_reg
-- 掩码用 nibabel 读数组(绕开 SimpleITK 2.5.2 读标注文件崩溃的 bug), 几何从参考影像拷贝
-- 配对:
-  primary(Original+Wavelet+shape): TumorCore×T1CE, Necrosis×T1CE, Edema×FLAIR, FLAIRChanges×FLAIR
-  cross(Original only): 其余 8 个 ROI×序列组合
-- 输出长表 radiomics_features_long.csv; 断点续跑按 (patient) 粒度
+Design:
+- every mask lives in the t1-gd space (Raidionics output, already validated)
+- sequence alignment: t1-gd is used as it is; t1w/t2-flair are used as they are when their geometry matches
+  t1-gd exactly, and otherwise resampled onto the t1-gd grid with the ANTs forward transform shipped with
+  Raidionics (CompositeTransform([affine, warp]), checked by mutual information to be the best combination),
+  with results cached in input_reg
+- masks are read as arrays with nibabel (which sidesteps the SimpleITK 2.5.2 crash on label files) and take
+  their geometry from the reference image
+- pairing:
+    - each ROI is paired with the sequence it belongs to
+    - cross (Original only): the remaining 8 ROI x sequence combinations
+- output is the long table radiomics_features_long.csv; the run resumes at patient granularity
 """
 import os, sys, csv, traceback, logging, gc
 import numpy as np
@@ -19,7 +21,7 @@ import nibabel as nib
 
 BASE = r'C:\Users\zhanglei\WorkBuddy\2026-09-18-22-15-57\scripts'
 INP = r'D:\Raidionics_data\input\2'
-REG = r'C:\Users\zhanglei\WorkBuddy\2026-09-18-22-15-57\input_reg\2'   # D盘已满, 配准缓存改落 C 盘
+REG = r'C:\Users\zhanglei\WorkBuddy\2026-09-18-22-15-57\input_reg\2'   # D: was full, so the registration cache went to C:
 MAIN = r'D:\Raidionics_data\patients\2'
 NEC = r'D:\Raidionics_data\patients_nec2\2'
 OUT_CSV = os.path.join(BASE, 'radiomics_features_long.csv')
@@ -55,9 +57,9 @@ def geom_same(a, b, tol=1e-4):
 
 
 def align_geom(mask_img, img):
-    """几何仅差机器精度时, 把掩码几何强制对齐到影像几何。
-    ITK 的 LabelStatisticsImageFilter 用 1e-6 容差判"同一物理空间",
-    nibabel/sitk 浮点往返误差(1e-5级)会让其报错, CopyInformation 可精确消除。"""
+    """When the geometry differs only by machine precision, force the mask geometry onto the image geometry.
+    ITK's LabelStatisticsImageFilter uses a 1e-6 tolerance to decide "same physical space", and the
+    nibabel/sitk float round-trip error (order 1e-5) makes it fail; CopyInformation removes it exactly."""
     try:
         if mask_img.GetSize() == img.GetSize():
             mask_img.CopyInformation(img)
@@ -68,7 +70,7 @@ def align_geom(mask_img, img):
 
 
 def make_mask_image(arr_nib, ref_img):
-    """nibabel [x,y,z] uint8 -> sitk image, 几何取自 ref"""
+    """nibabel [x,y,z] uint8 -> sitk image, with geometry taken from ref"""
     a = np.asanyarray(arr_nib.dataobj)
     a = np.transpose(a, (2, 1, 0)).astype(np.uint8)
     im = sitk.GetImageFromArray(a)
@@ -84,8 +86,8 @@ def load_mask(tree, patient, kw, ref_img):
 
 
 def load_disp(wrp_fn):
-    """读取 ANTs warp 场为位移变换。
-    统一用 float64 位移场, 与既有 78 例结果保持同一实现(方法学一致)。"""
+    """Read an ANTs warp field as a displacement transform.
+    Always a float64 displacement field, the same implementation as the existing 78 cases, to keep the methodology consistent."""
     img = sitk.ReadImage(wrp_fn)
     disp = sitk.DisplacementFieldTransform(sitk.Cast(img, sitk.sitkVectorFloat64))
     del img
@@ -93,7 +95,7 @@ def load_disp(wrp_fn):
 
 
 def get_sequence(patient, seq, ref_img):
-    """返回 (sitk image, 来源标记 raw/registered)"""
+    """Return (sitk image, source tag raw/registered)"""
     raw_fn = find(os.path.join(INP, patient, 'T0'), SEQ_FILE[seq])
     if raw_fn is None:
         return None, 'missing'
@@ -102,7 +104,7 @@ def get_sequence(patient, seq, ref_img):
         return raw, 'raw'
     if geom_same(raw, ref_img):
         return raw, 'raw'
-    # 重采样(带缓存)
+    # resample (with caching)
     cache = os.path.join(REG, patient, SEQ_FILE[seq] + '_reg.nii.gz')
     if os.path.exists(cache):
         return sitk.ReadImage(cache), 'registered'
@@ -129,7 +131,7 @@ def get_sequence(patient, seq, ref_img):
 def build_extractor(with_wavelet, with_shape):
     from radiomics import featureextractor
     ex = featureextractor.RadiomicsFeatureExtractor(binWidth=25)
-    ex.settings['correctMask'] = True      # 兜底: 残余几何差异自动重采样而非丢样本
+    ex.settings['correctMask'] = True      # safety net: residual geometry differences are resampled away rather than dropping the case
     ex.settings['geometryTolerance'] = 1e-3
     ex.disableAllImageTypes()
     ex.enableImageTypeByName('Original')
@@ -142,7 +144,7 @@ def build_extractor(with_wavelet, with_shape):
 
 
 def nib_to_sitk(path):
-    """nibabel 读取 NIfTI -> 正确几何的 sitk image (RAS->LPS 转换)"""
+    """nibabel reads a NIfTI -> sitk image with the correct geometry (RAS->LPS conversion)"""
     nii = nib.load(path)
     a = np.asanyarray(nii.dataobj)
     a = np.transpose(a, (2, 1, 0))
@@ -158,11 +160,11 @@ def nib_to_sitk(path):
 
 
 def get_mask_space_and_image(patient, roi, seq, ref_img, raws, seqs_t1gd):
-    """按掩码几何自动匹配影像:
-    - 掩码与 t1gd 网格一致 -> 用该序列的 t1gd 网格版本(原始或配准)
-    - 掩码与某序列原生网格一致且 seq 相同 -> 直接用原生影像
-    - 否则: 用 ANTs 变换把掩码最近邻重采样到 t1gd 网格
-    返回 (mask_img, img, src_note) 或 (None, None, reason)
+    """Match the image to the mask geometry automatically:
+    - mask already on the t1gd grid -> use the t1gd-grid version of that sequence (raw or registered)
+    - mask on some sequence's native grid and the sequence matches -> use the native image directly
+    - otherwise: nearest-neighbour resample the mask onto the t1gd grid with the ANTs transform
+    Returns (mask_img, img, src_note) or (None, None, reason)
     """
     tree, kw = (NEC, 'annotation-Necrosis') if roi == 'Necrosis' else \
                (MAIN, {'TumorCore': 'annotation-Tumor_MRI_TumorCore',
@@ -176,12 +178,12 @@ def get_mask_space_and_image(patient, roi, seq, ref_img, raws, seqs_t1gd):
     if nz < 30:
         return None, None, 'mask too small (%d voxels)' % nz
 
-    # 候选: t1gd 网格版本
+    # candidate: the t1gd-grid version
     img_t1gd_grid, src = seqs_t1gd.get(seq, (None, ''))
     candidates = []
     if img_t1gd_grid is not None:
         candidates.append((img_t1gd_grid, '%s(%s)' % (seq, src)))
-    # 掩码与自身原生序列一致(FLAIR/T1w 原生网格)
+    # mask on its own native sequence grid (FLAIR/T1w native grid)
     if seq in ('FLAIR', 'T1w') and raws.get(seq) is not None:
         candidates.append((raws[seq], '%s(native)' % seq))
 
@@ -189,11 +191,11 @@ def get_mask_space_and_image(patient, roi, seq, ref_img, raws, seqs_t1gd):
         if geom_same(mimg_native, img):
             align_geom(mimg_native, img)
             return mimg_native, img, note
-    # 掩码重采样到 t1gd 网格(最近邻)
+    # resample the mask onto the t1gd grid (nearest neighbour)
     if img_t1gd_grid is not None:
         trdir = os.path.join(MAIN, patient, 'Transforms')
         tr = None
-        # 掩码若在 flair 原生空间, 用 flair->t1gd 变换; 在 t1w 原生空间同理
+        # if the mask is in flair native space use the flair->t1gd transform; likewise for t1w native space
         mask_space = None
         for s in ('FLAIR', 'T1w'):
             if raws.get(s) is not None and geom_same(mimg_native, raws[s]):
@@ -244,7 +246,7 @@ def process_patient(patient):
             try:
                 mimg, img, note = get_mask_space_and_image(patient, roi, seq, ref_img, raws, seqs_t1gd)
             except Exception as e:
-                # 单对失败不应拖垮整例(此前会返回不完整数据), 记为该对失败后继续
+                # one failing pair must not sink the whole case (which used to return incomplete data); log it and carry on
                 fails.append((patient, roi, seq, 'pair error: ' + str(e)[:130]))
                 continue
             if mimg is None:
@@ -270,7 +272,7 @@ def process_patient(patient):
                     rows.append((patient, roi, seq, k, val))
             except Exception as e:
                 fails.append((patient, roi, seq, str(e)[:150]))
-        # 释放大体积影像, 降低内存碎片(大网格病例峰值可达数 GB)
+        # release the large volumes to reduce memory fragmentation (peak can reach several GB on big grids)
         for k in list(seqs_t1gd):
             seqs_t1gd[k] = (None, '')
         for k in list(raws):

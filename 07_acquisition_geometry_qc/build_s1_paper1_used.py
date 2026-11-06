@@ -1,19 +1,19 @@
 # -*- coding: utf-8 -*-
 r"""
-按 Paper 1 **实际使用的**术前影像序列，重建采集参数表（Table S1）。
+Rebuild the acquisition parameter table (Table S1) from the pre-operative series that Paper 1 **actually used**.
 
-权威口径:
-  - 分析队列 = paper1/analysis/predictions.csv（主分析队列，n=90；UIH 1.5T 单例已排除）
-  - 具体序列 = 生产流程 series_selection.csv 记录的 t1ce / flair / t1 路径
-    （这就是 Raidionics 输入 NIfTI -> pyradiomics 特征的实际来源）
-  - DICOM 头字段直接读原始文件；几何与 input/2 的 NIfTI 交叉验证，确保"这一条序列
-    就是 Paper 1 用的那一条"
+Authoritative definition:
+  - analysis cohort = paper1/analysis/predictions.csv (the main analysis cohort, n=90; the single UIH 1.5T case already excluded)
+  - specific series = the t1ce / flair / t1 paths recorded in series_selection.csv from the production pipeline
+    (these are exactly the source of the Raidionics input NIfTI and hence of the pyradiomics features)
+  - DICOM header fields are read straight from the original files; the geometry is cross-checked against the NIfTI in
+    input/2, which confirms that "this series is the one Paper 1 used"
 
-输出:
-  tables/S1a_paper1_by_vendor.csv     按厂商汇总
-  tables/S1b_paper1_per_case.csv      每例每序列明细（含 QC）
-  tables/S1c_paper1_vendor_signature.csv  厂商×机型×场强 技术签名
-  logs/s1_paper1_geometry_check.csv   序列↔NIfTI 几何一致性校验
+Output:
+  tables/S1a_paper1_by_vendor.csv        summary by vendor
+  tables/S1b_paper1_per_case.csv         per case per series detail (with QC)
+  tables/S1c_paper1_vendor_signature.csv vendor x model x field strength technical signature
+  logs/s1_paper1_geometry_check.csv      series vs NIfTI geometry consistency check
 """
 import os, sys, csv, glob
 import numpy as np
@@ -38,7 +38,7 @@ SEL_COL = {'t1c': 't1ce', 't1w': 't1', 'flair': 'flair'}
 
 
 def valstr(v):
-    """DICOM 值 -> 干净字符串（MultiValue 空格分隔）"""
+    """DICOM value -> clean string (MultiValue separated by spaces)"""
     if v is None:
         return ''
     if isinstance(v, (MultiValue, list, tuple)):
@@ -56,7 +56,7 @@ def num(v):
 
 
 def read_header(series_dir):
-    """读序列目录首个 DICOM 头 + 文件数"""
+    """Read the first DICOM header in the series directory plus the file count"""
     if not series_dir or not os.path.isdir(series_dir):
         return None
     files = [f for f in sorted(os.listdir(series_dir)) if os.path.isfile(os.path.join(series_dir, f))]
@@ -150,9 +150,9 @@ def main():
     cohort['patient'] = cohort.patient.astype(str)
     patients = cohort.patient.tolist()
     vendor_tab = dict(zip(cohort.patient, cohort.vendor))
-    print('Paper1 队列: %d 例' % len(patients))
+    print('Paper1 cohort: %d cases' % len(patients))
 
-    # 手术日期
+    # date of surgery
     surg = {}
     try:
         c = pd.read_csv(os.path.join(PROD, 'cohort_MGMT.csv'))
@@ -160,7 +160,7 @@ def main():
         for _, r in c.iterrows():
             surg[r.patient] = str(r.get('surgery_date', ''))
     except Exception as e:
-        print('  手术日期读取失败:', e)
+        print('  could not read the date of surgery:', e)
 
     rows, geo_rows, missing = [], [], []
     t1c_geom = {}
@@ -180,14 +180,14 @@ def main():
                 missing.append((p, role + ' | ' + p_e))
                 continue
             g = nifti_geom(p, role)
-            # 特征提取时该序列所用的网格：原生几何 vs 重采样到 T1c 网格
+            # grid used for this series at extraction time: native geometry vs resampled to the T1c grid
             if role == 't1c' or g is None or t1c_geom.get(p) is None:
                 grid = 'native (T1c reference)'
             else:
                 same = (g['dim'] == t1c_geom[p]['dim'] and
                         all(abs(a - b) < 1e-4 for a, b in zip(g['zooms'], t1c_geom[p]['zooms'])))
                 grid = 'native' if same else 'resampled to T1c grid'
-            # 几何一致性校验
+            # geometry consistency check
             ok_dims = ok_spacing = ''
             if g is not None:
                 ok_dims = (g['dim'][0] == int(h['Columns']) and g['dim'][1] == int(h['Rows'])) if (
@@ -236,13 +236,13 @@ def main():
             })
 
     df = pd.DataFrame(rows)
-    print('S1b 行数: %d (期望 n×3)' % len(df))
+    print('S1b rows: %d (expected n x 3)' % len(df))
     if missing:
-        print('缺失 %d 条:' % len(missing))
+        print('%d records missing:' % len(missing))
         for m in missing[:20]:
             print('   ', m)
 
-    # ---- QC: 影像 vs 手术日期 ----
+    # ---- QC: imaging vs date of surgery ----
     def days(row):
         try:
             import datetime
@@ -277,16 +277,16 @@ def main():
     geo = pd.DataFrame(geo_rows)
     bad = geo[(geo.dim_match == False)]
     if len(bad):
-        print('\n⚠ 几何不一致 %d 条:' % len(bad))
+        print('\ngeometry mismatches: %d' % len(bad))
         print(bad[['patient', 'role', 'dicom_series_desc', 'nifti_dim', 'dicom_Cols_x_Rows']].to_string(index=False))
     else:
-        print('\n几何一致性: 全部通过 (%d/%d)' % ((geo.dim_match == True).sum(), len(geo)))
+        print('\ngeometry consistency: all passed (%d/%d)' % ((geo.dim_match == True).sum(), len(geo)))
 
     df.to_csv(os.path.join(OUT, 'S1b_paper1_per_case.csv'), index=False, encoding='utf-8-sig')
     geo.to_csv(os.path.join(LOG, 's1_paper1_geometry_check.csv'), index=False, encoding='utf-8-sig')
-    print('\n[S1b 已写出]')
+    print('\n[S1b written]')
 
-    # ---- S1a: 按厂商汇总 ----
+    # ---- S1a: summary by vendor ----
     def fmt_med(x, dec=1):
         x = pd.to_numeric(x, errors='coerce').dropna()
         if len(x) == 0:
@@ -294,7 +294,7 @@ def main():
         return ('%.*f (%.*f-%.*f)' % (dec, x.median(), dec, x.min(), dec, x.max()))
 
     order = ['Siemens', 'GE', 'UIH', 'Philips']
-    # 分组依据：T1c（分割与特征提取的参考网格）实测厂商，保证每例只归一组
+    # grouping is by the measured vendor of T1c (the reference grid for segmentation and extraction), so each case falls in exactly one group
     t1c_vendor = df[df['Sequence role'] == 'T1C'].drop_duplicates('Patient').set_index('Patient').Vendor
     df['_Grp'] = df.Patient.map(t1c_vendor)
     vend = [v for v in order if v in set(df._Grp.dropna())]
@@ -351,7 +351,7 @@ def main():
     print('\n=== S1a ===')
     print(s1a.to_string(index=False))
 
-    # ---- S1c: 厂商 × 机型 × 场强 技术签名 ----
+    # ---- S1c: vendor x model x field strength technical signature ----
     sc = df.groupby(['Vendor', 'Model', 'Field strength (T)']).agg(
         n_sequences=('Patient', 'size'),
         n_patients=('Patient', 'nunique'),
@@ -362,15 +362,15 @@ def main():
     print('\n=== S1c ===')
     print(sc.to_string(index=False))
 
-    # 队列厂商分布（与 Table1 对照）
+    # vendor distribution of the cohort (to compare with Table 1)
     pv = df.drop_duplicates('Patient')[['Patient', 'Vendor']]
-    print('\n队列厂商分布（按病例）:')
+    print('\nvendor distribution of the cohort (by case):')
     print(pv.Vendor.value_counts().to_string())
-    print('\n声明 vendor 标签 vs DICOM 实测 不一致的病例:')
+    print('\ncases where the declared vendor label disagrees with the DICOM measurement:')
     pv = pv.copy()
     pv['declared'] = pv.Patient.map(vendor_tab)
     mism = pv[pv.Vendor != pv.declared]
-    print(mism.to_string(index=False) if len(mism) else '  无')
+    print(mism.to_string(index=False) if len(mism) else '  none')
 
 
 if __name__ == '__main__':

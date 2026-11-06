@@ -1,17 +1,24 @@
 # -*- coding: utf-8 -*-
 r"""
-Paper 1 补充材料 Table S1 — 全队列 MRI 采集参数重建
-数据源：E:\NeuroImagepre（107 例，含 3 例 PAT/STUDY/SERIES 结构）
-        + D:\Raidionics_data\disc_*（2 例：P004 / P025）
+Whole-database MRI acquisition audit -- NOT a supplementary table
+Data sources: E:\NeuroImagepre (107 cases, including 3 with a PAT/STUDY/SERIES structure)
+              + D:\Raidionics_data\disc_* (2 cases: P004 / P025)
 
-输出：
-  S1a_acquisition_by_vendor.csv   按厂商 × 序列角色汇总
-  S1b_acquisition_per_case.csv    逐例逐序列明细（含 TR/TE/TI/场强/机型）
-  S1c_vendor_signature.csv        厂商技术参数签名（场强/机型分布）
+This script works on the full 109-case database and all three series of every case, so its output
+includes the single United Imaging 1.5 T case and does not match the 89-case paper cohort. It is
+kept for traceability of the vendor/geometry audit only. The tables actually submitted as
+Supplementary Tables S1a-S1c are produced by `build_s1_paper1_used.py`, which keeps one series per
+sequence for the 89 cases; the files written here were withdrawn from the submission package on
+2026-11-06 (see supplementary_tables/TABLE_LEGENDS.md).
+
+Output:
+  S1a_acquisition_by_vendor.csv   summary by vendor x sequence role
+  S1b_acquisition_per_case.csv    per case per sequence detail (with TR/TE/TI/field strength/model)
+  S1c_vendor_signature.csv        vendor technical signature (field strength and model distribution)
 """
 import os as _os, sys as _sys
 _sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), '..', 'tools'))
-from patient_ids import to_name, resolve   # noqa: E402  患者编号 <-> 本地姓名
+from patient_ids import to_name, resolve   # noqa: E402  patient code <-> local name
 import os, csv, json, re
 import numpy as np
 import pandas as pd
@@ -29,9 +36,9 @@ DISC = r"D:\Raidionics_data"
 
 ROLES = ["T1c", "T1w", "FLAIR"]
 
-# ---------- 6 例未被 series_selection 覆盖的病例：手工指定（依据 ContrastBolusAgent 与序列名） ----------
-# 值 = (根目录类型, study_dir, series_dir)
-# 键为本地患者目录名（由去标识编号经 to_name() 还原）
+# ---------- the 6 cases not covered by series_selection: specified by hand (from ContrastBolusAgent and the series name) ----------
+# value = (root type, study_dir, series_dir)
+# keys are local patient directory names (recovered from the de-identified code via to_name())
 MANUAL = {
     to_name("P001"): {"study": "STD00001",    "root": "E",
                       "T1c": "SER00008",       "T1w": "SER00004",       "FLAIR": "SER00007"},
@@ -70,7 +77,7 @@ HDR_FIELDS = [
 
 
 def num(v):
-    """提取数值，失败返回 None"""
+    """Extract the number; returns None on failure"""
     if v is None or v == "":
         return None
     s = str(v).replace("\\", " ")
@@ -82,7 +89,7 @@ def num(v):
 
 
 def valstr(v):
-    """统一把 DICOM 值转字符串（MultiValue -> 空格分隔，不带引号）"""
+    """Convert a DICOM value to a string consistently (MultiValue -> space separated, no quotes)"""
     if v is None:
         return ""
     if isinstance(v, (MultiValue, list, tuple)):
@@ -91,7 +98,7 @@ def valstr(v):
 
 
 def read_header(series_dir):
-    """读序列目录第一个 DICOM 的头"""
+    """Read the header of the first DICOM in the series directory"""
     if not os.path.isdir(series_dir):
         return None
     files = sorted(os.listdir(series_dir))
@@ -112,7 +119,7 @@ def read_header(series_dir):
 
 
 def find_series_dir(root, study, series_name):
-    """在 root 下定位 series_dir（限定 study 层）"""
+    """Locate series_dir under root (restricted to the study level)"""
     for dirpath, dirnames, filenames in os.walk(root):
         if os.path.basename(dirpath) != series_name:
             continue
@@ -175,7 +182,7 @@ def main():
                 "Series dir": os.path.relpath(sd, E_ROOT if sd.upper().startswith("E:") else DISC),
             }
             row.update(h)
-            # 格式化
+            # formatting
             for k in ["TR_ms", "TE_ms", "TI_ms", "FlipAngle_deg", "SliceThickness_mm", "SliceSpacing_mm"]:
                 v = num(h.get(k))
                 row[k] = "" if v is None else (f"{v:g}")
@@ -195,11 +202,11 @@ def main():
 
     df = pd.DataFrame(rows_s1b)
 
-    # ---------- QC：与手术日期比对 ----------
+# ---------- QC: compare with the date of surgery ----------
     xls = r"D:\1桌面文件\AI\GBM_clinical_data.xlsx"
     x = pd.read_excel(xls)
     x.columns = [str(c).strip() for c in x.columns]
-    # 临床表 Name 列 → 本地患者目录名：先经拼写变体表与编号归一, 再还原为目录名
+# Name column of the clinical table -> local patient directory name: first through the spelling-variant table and code normalisation, then back to a directory name
     x["pid"] = (x["Name"].astype(str).str.replace(r"\(.*?\)", "", regex=True).str.strip()
                 .map(lambda n: to_name(resolve(n))))
     surg = dict(zip(x.pid, pd.to_datetime(x["Surgery date"], errors="coerce")))
@@ -214,7 +221,7 @@ def main():
     df["SurgeryDate"] = df.Patient.map(surg)
     df["Days from surgery"] = (df.StudyDate_dt - df.SurgeryDate).dt.days
 
-    # 每例三序列日期是否一致
+# whether the three sequences of each case share one date
     cons = df.groupby("Patient").StudyDate.nunique().rename("n_unique_dates")
     df = df.merge(cons, on="Patient", how="left")
 
@@ -233,10 +240,10 @@ def main():
 
     df.to_csv(os.path.join(OUT, "S1b_acquisition_per_case.csv"), index=False, encoding="utf-8-sig")
     print("S1b rows:", len(df), "patients:", df.Patient.nunique())
-    print("\n=== QC flag 汇总（按例）===")
+    print("\n=== QC flag summary (by case) ===")
     q = df.groupby("Patient")["QC flag"].first().value_counts()
     print(q.to_string())
-    print("\n=== 非 OK 病例 ===")
+    print("\n=== cases that are not OK ===")
     badp = df.groupby("Patient")["QC flag"].first()
     badp = badp[badp != "OK"]
     for p, f in badp.items():
@@ -245,11 +252,11 @@ def main():
             f"{r['Sequence role']}={r.StudyDate}(Δ{r['Days from surgery']:+.0f}d)" for _, r in sub.iterrows()))
 
     if unmatched:
-        print("\n未匹配清单:")
+        print("\nunmatched list:")
         for u in unmatched:
             print("  ", u)
 
-    # ---------- S1a: 按厂商 × 序列角色汇总 ----------
+# ---------- S1a: summary by vendor x sequence role ----------
     def rng(s):
         v = pd.to_numeric(s, errors="coerce").dropna()
         if v.empty:
@@ -283,7 +290,7 @@ def main():
     print("\nS1a rows:", len(a))
     print(a[["Vendor", "Sequence", "n patients", "Field strength", "TR (ms)", "TE (ms)", "TI (ms)"]].to_string(index=False))
 
-    # ---------- S1c: 厂商技术签名（场强 × 机型） ----------
+# ---------- S1c: vendor technical signature (field strength x model) ----------
     uniq = df.drop_duplicates(["Patient"])
     tech = uniq.groupby(["Vendor", "Model", "FieldStrength_T"]).agg(
         n_patients=("Patient", "nunique"),
@@ -296,7 +303,7 @@ def main():
     print("\nS1c:")
     print(tech.to_string(index=False))
 
-    # 保存完整明细供核查
+# save the full detail for checking
     df.to_csv(os.path.join(SCR, "S1b_full_detailed.csv"), index=False, encoding="utf-8-sig")
     print("\nDONE")
 

@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
-r"""
-扫描 E:\NeuroImagepre 全量术前 DICOM，提取每个序列的采集参数。
-输出：pre_dicom_series_inventory.csv（每个患者每个序列一行）
+r"""Scan the full preoperative DICOM archive under E:\NeuroImagepre and extract the acquisition parameters of every series.
+Output: pre_dicom_series_inventory.csv (one row per patient per series)
 """
 import os, sys, csv, glob, json
 import pydicom
@@ -21,7 +20,7 @@ TAGS = [
 ]
 
 def dcm_probe(series_dir):
-    """读取序列目录中第一个 DICOM 文件的头信息"""
+    """Read the header of the first DICOM file in a series directory"""
     files = sorted(os.listdir(series_dir))
     for fn in files:
         fp = os.path.join(series_dir, fn)
@@ -42,7 +41,7 @@ def dcm_probe(series_dir):
                 rec[t] = "\\".join(str(x) for x in v)
             else:
                 rec[t] = str(v)
-        # 文件数 = 层数
+        # number of files = number of slices
         rec["n_files"] = sum(1 for f in files if os.path.isfile(os.path.join(series_dir, f)))
         return rec
     return None
@@ -54,15 +53,15 @@ def main():
         pdir = os.path.join(ROOT, pat)
         if not os.path.isdir(pdir):
             continue
-        # 日期目录（可能多个）
+        # study-date directories (there may be several)
         dates = sorted([d for d in os.listdir(pdir) if os.path.isdir(os.path.join(pdir, d))])
         for dt in dates:
             dt_dir = os.path.join(pdir, dt)
-            # ImageFileName_* 或直接序列目录
+            # ImageFileName_* or a direct series directory
             subs = sorted([s for s in os.listdir(dt_dir) if os.path.isdir(os.path.join(dt_dir, s))])
             for sub in subs:
                 sub_dir = os.path.join(dt_dir, sub)
-                # 若子目录里还有数字目录 -> 序列层级
+                # a numeric directory nested one level deeper means the series level
                 inner = sorted([x for x in os.listdir(sub_dir) if os.path.isdir(os.path.join(sub_dir, x))])
                 ser_dirs = []
                 if inner and any(x.isdigit() for x in inner):

@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
-r"""
-诊断：series_selection.csv（生产流程的序列选择）在 E 盘的可解析性。
+r"""Diagnostics: whether series_selection.csv (the series chosen by the production pipeline) resolves on the E: drive.
 """
 import pandas as pd, os
 
@@ -11,8 +10,8 @@ s = pd.read_csv(SEL)
 s = s[s.patient.notna()]
 pats = set(s.patient.astype(str))
 coh = set(os.listdir(COHORT))
-print("队列 109 例中 series_selection 未覆盖:", sorted(coh - pats))
-print("series_selection 中非队列病例:", sorted(pats - coh))
+print("Cohort cases (of 109) not covered by series_selection:", sorted(coh - pats))
+print("Cases in series_selection that are not in the cohort:", sorted(pats - coh))
 print()
 
 ok = tot = 0
@@ -29,7 +28,7 @@ for _, r in s.iterrows():
             ok += 1
         else:
             bad.append((r.patient, c, p2))
-print(f"E盘可解析: {ok}/{tot}")
-print("\n失败清单:")
+print(f"Resolvable on the E: drive: {ok}/{tot}")
+print("\nFailure list:")
 for b in bad:
     print("  ", b)

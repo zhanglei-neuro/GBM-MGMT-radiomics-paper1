@@ -1,15 +1,16 @@
 # -*- coding: utf-8 -*-
-r"""Paper 1 -- R1-L2: GE 亚组内 AUC<0.5 的可靠性诊断
+r"""Paper 1 -- R1-L2: how reliable is the AUC<0.5 inside the GE subgroup
 
-回答审稿人: 报告 GE 亚组内 (a) 每折训练/测试的类别分布, (b) 每折 AUC 与方向,
-(c) 内层筛选出的特征在训练折上的关联方向及其在测试折上的稳定性,
-(d) 单变量层面 (不做特征选择) 的标签-特征关联方向统计。
+Answers the reviewer by reporting, within the GE subgroup, (a) the class distribution of each training and test fold,
+(b) the per-fold AUC and direction, (c) the association direction of the features selected by the inner loop on the
+training fold and how stable it is on the test fold, and (d) the label-feature association direction at the
+univariable level, with no feature selection.
 
-输出: analysis/ge_diagnostics.json
+Output: analysis/ge_diagnostics.json
 """
 import os as _os, sys as _sys
 _sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), '..', 'tools'))
-from patient_ids import to_id   # noqa: E402  患者编号 <-> 本地姓名
+from patient_ids import to_id   # noqa: E402  patient code <-> local name
 import os, json, warnings
 import numpy as np, pandas as pd
 from sklearn.model_selection import StratifiedKFold, GridSearchCV
@@ -27,13 +28,13 @@ SEED = 42
 df = pd.read_csv(os.path.join(SRC, 'radiomics_features_long.csv'), encoding='utf-8-sig')
 df['feat'] = df['roi'] + '|' + df['seq'] + '|' + df['feature']
 Xa = df.pivot_table(index='patient', columns='feat', values='value', aggfunc='first')
-Xa.index = [to_id(p) for p in Xa.index]            # 数据键统一为 Pxxx
+Xa.index = [to_id(p) for p in Xa.index]            # all data keys are Pxxx
 co = pd.read_csv(os.path.join(SRC, 'cohort_MGMT.csv'), encoding='utf-8-sig')
 co['y'] = co['MGMT'].astype(str).str.strip().str.startswith('+').astype(int)
 co = co.set_index('patient')
 co.index = [to_id(p) for p in co.index]
-# 排除 United Imaging 1.5T 单例 (见稿件 3.8)。按 vendor 判断, 不按姓名:
-# 发布版数据的患者标识为 Pxxx, 按姓名排除会静默失效并改变 n。
+# Exclude the single United Imaging 1.5T case (see manuscript 3.8). Decided by vendor, not by name:
+# in the released data patients are Pxxx, so excluding by name fails silently and changes n.
 common = [p for p in co.index if p in Xa.index
           and str(co.loc[p, 'vendor']).strip() != 'UIH']
 X = Xa.loc[common]
@@ -61,7 +62,7 @@ def inner_select(Xtr, ytr, max_feat=200, corr_th=0.90, max_keep=40):
 
 res = {'n': n, 'n_pos': npos, 'n_neg': n - npos}
 
-# ---- (a)(b) 每折类别分布与 AUC ----
+# ---- (a)(b) class distribution and AUC per fold ----
 skf = StratifiedKFold(5, shuffle=True, random_state=SEED)
 folds = []
 oof = np.zeros(n)
@@ -76,13 +77,13 @@ for k, (tr, te) in enumerate(skf.split(Xg, yg)):
     oof[te] = p
     try: fa = float(roc_auc_score(yg[te], p))
     except Exception: fa = np.nan
-    # 训练折上 top10 特征的关联方向
+    # association direction of the top-10 features on the training fold
     top = sorted(auc, key=auc.get, reverse=True)[:10]
     sd = []
     for c in top:
         v = Xg.iloc[tr][c].values; m = np.isfinite(v)
         if m.sum() < 10: continue
-        try: sd.append(float(roc_auc_score(yg[tr][m], v[m])))       # >0.5 表示值高->阳性
+        try: sd.append(float(roc_auc_score(yg[tr][m], v[m])))       # >0.5 means higher value -> positive
         except Exception: pass
     folds.append({'fold': k + 1, 'n_train': int(len(tr)), 'n_test': int(len(te)),
                   'train_pos': int(yg[tr].sum()), 'train_neg': int((1 - yg[tr]).sum()),
@@ -102,10 +103,10 @@ res['top10_direction_on_train'] = {
     'median_auc': float(np.median(sd)),
     'pct_below_0.4': float((sd < 0.4).mean()),
     'pct_above_0.6': float((sd > 0.6).mean()),
-    'note': '训练折内 top10 单变量 AUC (值高->阳性); 50% 左右说明方向随机'
+    'note': 'univariable AUC of the top-10 features within the training fold (higher value -> positive); around 50% means the direction is random'
 }
 
-# ---- (d) 全 GE 亚组单变量方向分布 ----
+# ---- (d) distribution of univariable directions across the whole GE subgroup ----
 uni = []
 for c in Xg.columns:
     v = Xg[c].values; m = np.isfinite(v)
@@ -115,10 +116,10 @@ for c in Xg.columns:
 uni = np.array(uni)
 res['univariate_all_features_GE'] = {
     'n': int(len(uni)), 'frac_above_0.5': float((uni > 0.5).mean()),
-    'frac_signif_p05_by_perm_note': '见 ge_perm_null.json',
+    'frac_signif_p05_by_perm_note': 'see ge_perm_null.json',
     'q10': float(np.percentile(uni, 10)), 'q50': float(np.percentile(uni, 50)),
     'q90': float(np.percentile(uni, 90)),
-    'note': '若存在真实的系统性反向关联, 单变量 AUC 分布应整体左移 (frac_above_0.5 明显 <0.5)'
+    'note': 'if there were a genuine systematic inverse association the univariable AUC distribution would shift left as a whole (frac_above_0.5 clearly <0.5)'
 }
 print('univariate frac>0.5 = %.3f  median = %.3f' % (res['univariate_all_features_GE']['frac_above_0.5'],
                                                     res['univariate_all_features_GE']['q50']))

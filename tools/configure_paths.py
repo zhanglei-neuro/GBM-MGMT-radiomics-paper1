@@ -1,16 +1,12 @@
 # -*- coding: utf-8 -*-
-r"""
-configure_paths.py — 把脚本中的原始绝对路径改写为你自己的目录
+r"""configure_paths.py -- rewrite the original absolute paths in the scripts to point at your own directories
 
-用法（推荐先 --dry 预演）:
+Usage (run --dry first to preview):
     python tools/configure_paths.py --dry
-    python tools/configure_paths.py \
-        --set "E:\NeuroImagepre=D:\data\NeuroImagepre" \
-        --set "D:\Raidionics_data=E:\Raidionics\out" \
-        --set "D:\1桌面文件\AI\GBM_clinical_data.xlsx=D:\data\clinical.xlsx"
+    python tools/configure_paths.py --set "D:\\my\\clinical.xlsx=D:\\data\\clinical.xlsx"
 
-不带 --set 时进入交互模式，逐条询问是否替换。
-替换仅作用于 .py 文件，且同时匹配正斜杠 / 反斜杠两种写法。
+Without --set it goes into interactive mode and asks about each path in turn.
+Replacement only touches .py files and matches both the forward-slash and backslash spellings.
 """
 import os, re, sys, argparse, collections
 
@@ -45,10 +41,10 @@ def apply_rules(root, rules, dry=True):
             if hits and s != s0:
                 n_file += 1
                 n_hit += 1
-                print('  %-58s 已改写' % os.path.relpath(p, root))
+                print('  %-58s rewritten' % os.path.relpath(p, root))
                 if not dry:
                     open(p, 'w', encoding='utf-8').write(s)
-    print('\n%s：%d 个文件' % ('预演' if dry else '完成', n_file))
+    print('\n%s: %d files' % ('dry run' if dry else 'done', n_file))
 
 
 def main():
@@ -63,28 +59,28 @@ def main():
         rules = []
         for kv in a.set:
             if '=' not in kv:
-                print('忽略（缺少 =）：', kv)
+                print('ignored (no = sign):', kv)
                 continue
             old, new = kv.split('=', 1)
             rules.append((old.strip(), new.strip()))
     else:
-        print('未提供 --set，进入交互模式。直接回车 = 跳过该条。\n')
+        print('no --set given, entering interactive mode. Press Enter to skip an entry.\n')
         rules = []
         for old in DEFAULTS:
             new = input('  %s\n    → ' % old).strip()
             if new:
                 rules.append((old, new))
         if not rules:
-            print('未配置任何路径，退出。')
+            print('no paths configured, exiting.')
             return
 
-    print('\n将执行以下替换：')
+    print('\nthe following replacements will be made:')
     for old, new in rules:
         print('  %s  →  %s' % (old, new))
     print()
     apply_rules(a.root, rules, dry=a.dry)
     if a.dry:
-        print('提示：去掉 --dry 即真正写入。')
+        print('hint: drop --dry to actually write.')
 
 
 if __name__ == '__main__':

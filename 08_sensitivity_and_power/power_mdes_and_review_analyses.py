@@ -1,18 +1,18 @@
 # -*- coding: utf-8 -*-
-r"""Paper 1 - 审稿意见响应新增分析 (快分析, 全部可在数分钟内完成)
-覆盖:
-  R1-M2 / R2   : 最小可检出 AUC (MDES) 功效分析 (n=89, 45/44, alpha=0.05, power=0.8)
-  R1-M3 / R2-M1: IDH x 厂商 x MGMT 交叉表 + 全部基线变量组间检验 (表 1 补全)
-  R1-M4        : 3D 薄层亚组 (n=59, Siemens 28 vs GE 31) 内的厂商效应 (几何匹配下)
-  R1-M6 / R2   : 定量批次指标 (ASW 轮廓系数 + 置换 p)、
-                 BH-FDR 显著特征数的标签置换零分布 (保留特征相关结构)、
-                 DeLong 检验 (影像组学 vs 临床基线)、NRI / IDI
-  R1-清单#9    : 联合模型与纯影像组学预测完全一致的机制核验
-产出: analysis/review_metrics.json, analysis/table1_pvalues.csv
+r"""Paper 1 - additional analyses requested in peer review (fast; all finish in minutes)
+Covers:
+  R1-M2 / R2   : minimum detectable AUC (MDES) power analysis (n=89, 45/44, alpha=0.05, power=0.8)
+  R1-M3 / R2-M1: IDH x vendor x MGMT cross-tab plus between-group tests for every baseline variable (Table 1 completion)
+  R1-M4        : vendor effect inside the 3D thin-slice subgroup (n=59, Siemens 28 vs GE 31), i.e. under matched geometry
+  R1-M6 / R2   : quantitative batch metrics (ASW silhouette + permutation p),
+                 label-permutation null distribution of the number of BH-FDR-significant features (feature correlation structure preserved),
+                 DeLong test (radiomics vs clinical baseline), NRI / IDI
+  R1-checklist#9: mechanism check for why the combined model predicts exactly like radiomics alone
+Outputs: analysis/review_metrics.json, analysis/table1_pvalues.csv
 """
 import os as _os, sys as _sys
 _sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), '..', 'tools'))
-from patient_ids import to_id   # noqa: E402  患者编号 <-> 本地姓名
+from patient_ids import to_id   # noqa: E402  patient code <-> local name
 import os, json, warnings
 import numpy as np, pandas as pd
 from scipy import stats
@@ -37,10 +37,10 @@ Xall = df.pivot_table(index='patient', columns='feat', values='value', aggfunc='
 co = pd.read_csv(os.path.join(SRC, 'cohort_MGMT.csv'), encoding='utf-8-sig')
 co['y'] = co['MGMT'].astype(str).str.strip().map(lambda s: 1 if s.startswith('+') else 0)
 co = co.set_index('patient')
-co.index = [to_id(p) for p in co.index]            # 数据键统一为 Pxxx
+co.index = [to_id(p) for p in co.index]            # all data keys are Pxxx
 Xall.index = [to_id(p) for p in Xall.index]
-# 排除 United Imaging 1.5T 单例 (见稿件 3.8)。按 vendor 判断, 不按姓名:
-# 发布版数据的患者标识为 Pxxx, 按姓名排除会静默失效并改变 n。
+# Exclude the single United Imaging 1.5T case (see manuscript 3.8). Decided by vendor, never by name:
+# in the released data patients are identified as Pxxx, so excluding by name fails silently and changes n.
 common = [p for p in co.index if p in Xall.index
           and str(co.loc[p, 'vendor']).strip() != 'UIH']
 X = Xall.loc[common].copy()
@@ -52,12 +52,12 @@ male = co['gender'].astype(str).str.strip().eq('M').astype(int).values
 N = len(y); n1 = int(y.sum()); n0 = N - n1
 log('n=%d  MGMT+ %d / MGMT- %d  features=%d' % (N, n1, n0, X.shape[1]))
 
-# ================= R1-M2: MDES 功效分析 =================
+# ================= R1-M2: MDES power analysis =================
 log('\n=== [1] MDES: minimum detectable AUC (alpha=.05 two-sided, power=.80) ===')
 
 def emp_auc_power(a_true, n_pos, n_neg, n_sim=4000, seed=SEED):
-    """双正态模型 (equal variance): AUC = Phi(z/sqrt(2)) -> z = sqrt(2)*Phi^-1(AUC)
-    模拟经验 AUC 的抽样分布, 用 Hanley-McNeil SE 做 z 检验 (双侧)."""
+    """Bi-normal model (equal variance): AUC = Phi(z/sqrt(2)) -> z = sqrt(2)*Phi^-1(AUC)
+    Simulates the sampling distribution of the empirical AUC and runs a two-sided z test with the Hanley-McNeil SE."""
     rng = np.random.default_rng(seed)
     from scipy.stats import norm
     z = np.sqrt(2) * norm.ppf(a_true)
@@ -67,7 +67,7 @@ def emp_auc_power(a_true, n_pos, n_neg, n_sim=4000, seed=SEED):
     se2 = (a_true * (1 - a_true) + (n_pos - 1) * (Q1 - a_true ** 2)
            + (n_neg - 1) * (Q2 - a_true ** 2)) / (n_pos * n_neg)
     se = np.sqrt(se2)
-    # 模拟验证 SE 并计算功效: 拒绝域 |A-0.5|/se >= 1.96
+    # simulate to verify the SE and compute power: rejection region |A-0.5|/se >= 1.96
     power = 1 - norm.cdf(1.959964 - (a_true - .5) / se) + norm.cdf(-1.959964 - (a_true - .5) / se)
     return float(se), float(power)
 
@@ -77,7 +77,7 @@ for a in grid:
     se, pw = emp_auc_power(a, n1, n0)
     res.append((a, se, pw))
 arr = np.array(res)
-# 线性插值求 power=0.80 的 AUC
+# linear interpolation for the AUC at power = 0.80
 pw = arr[:, 2]; aa = arr[:, 0]
 i = np.argmax(pw >= 0.80)
 if pw[i] < 0.80:
@@ -90,7 +90,7 @@ R['mdes'] = {'n': N, 'n_pos': n1, 'n_neg': n0, 'alpha': 0.05, 'power': 0.80,
              'se_at_mdes': round(float(arr[i, 1]), 4),
              'note': 'binormal model, Hanley-McNeil SE, two-sided z test'}
 log('  MDES = %.3f  (n=%d, %d/%d)' % (mdes, N, n1, n0))
-# 也给出 80%/90% power 下限与 AUC=0.60 的功效
+# also report the 80%/90% power limits and the power at AUC = 0.60
 for target, lab in [(0.60, 'auc60'), (0.655, 'auc655'), (0.65, 'auc65')]:
     se, pw = emp_auc_power(target, n1, n0)
     R['mdes']['power_at_' + lab] = round(pw, 3)
@@ -102,7 +102,7 @@ if pw90[i90] >= 0.90:
     j90 = i90 - 1
     R['mdes']['min_detectable_auc_power90'] = round(float(np.interp(0.90, [pw90[j90], pw90[i90]], [aa[j90], aa[i90]])), 3)
 
-# ================= R1-M3: 表 1 全变量组间检验 + IDH 交叉 =================
+# ================= R1-M3: between-group tests for all Table 1 variables + IDH cross-tab =================
 log('\n=== [2] baseline comparisons Siemens vs GE + IDH crosstab ===')
 ms, mg = vendor == 'Siemens', vendor == 'GE'
 rows = []
@@ -118,7 +118,7 @@ tab_sex = pd.crosstab(male, ms).reindex(index=[0, 1], columns=[False, True]).fil
 p_sex = stats.fisher_exact(tab_sex)[1] if (tab_sex < 5).any() else stats.chi2_contingency(tab_sex, correction=True)[1]
 rows.append(['Male sex', '%d' % male[ms].sum(), '%d' % male[mg].sum(), 'chi-square', '%.3f' % p_sex, ''])
 pv = pd.read_csv(os.path.join(ANA, 'per_case_volumes.csv'), encoding='utf-8-sig')
-pv['patient'] = [to_id(p) for p in pv['patient']]     # 落盘表统一归一化为 Pxxx
+pv['patient'] = [to_id(p) for p in pv['patient']]     # written tables are normalised to Pxxx
 pv = pv.set_index('patient').loc[X.index]
 for lab, col in [('Tumour core volume (mL)', 'TC'), ('Necrosis volume (mL)', 'NE'),
                  ('Edema volume (mL)', 'ED'), ('FLAIR changes volume (mL)', 'FL'),
@@ -145,7 +145,7 @@ t1p.to_csv(os.path.join(ANA, 'table1_pvalues.csv'), index=False, encoding='utf-8
 log('\n' + t1p.to_string(index=False))
 
 idh = co['IDH'].astype(str).str.strip()
-_idh_tab = pd.crosstab(idh == '+1', ms)   # 0 突变时退化为 1 行 => Fisher 不适用
+_idh_tab = pd.crosstab(idh == '+1', ms)   # degenerates to one row when there are no mutants, so Fisher does not apply
 R['idh'] = {
     'mutant_n': int((idh == '+1').sum()),
     'mutant_by_vendor': {'Siemens': int(((idh == '+1') & ms).sum()), 'GE': int(((idh == '+1') & mg).sum())},
@@ -155,8 +155,8 @@ R['idh'] = {
     'mgmt_rate_mutant_vs_wt': {
         'mutant': (round(float(y[idh == '+1'].mean()), 3) if (idh == '+1').any() else None),
         'wildtype': round(float(y[idh == '-'].mean()), 3)},
-    # 2026-10-11 作者更正: 本队列 89 例全部为 IDH 野生型 (WHO 2021 GBM)。
-    # 源数据库原有的 6 例"突变型"经核对不在本队列内, 属录入错误 => 交叉表退化, 不适用。
+    # Author correction, 2026-10-11: all 89 cases in this cohort are IDH wild-type (WHO 2021 GBM).
+    # The six "mutant" records in the source database turned out not to belong to this cohort (entry errors), so the cross-tab degenerates and does not apply.
     'fisher_idh_vendor_p': (round(float(stats.fisher_exact(_idh_tab.values)[1]), 4)
                             if _idh_tab.shape == (2, 2) else None),
     'fisher_idh_vendor_p_note': ('' if _idh_tab.shape == (2, 2) else
@@ -165,10 +165,10 @@ R['idh'] = {
 }
 log('  IDH: %s' % json.dumps(R['idh'], ensure_ascii=False))
 
-# ================= R1-M4: 3D 薄层亚组内的厂商效应 =================
+# ================= R1-M4: vendor effect within the 3D thin-slice subgroup =================
 log('\n=== [3] vendor effect WITHIN the 3D thin-slice subset (geometry-matched) ===')
 s1b = pd.read_csv(os.path.join(OUT, 'supplementary/tables/S1b_paper1_per_case.csv'))
-s1b['Patient'] = [to_id(p) for p in s1b['Patient']]   # 与 X.index 同一命名空间
+s1b['Patient'] = [to_id(p) for p in s1b['Patient']]   # same namespace as X.index
 t1c = s1b[s1b['Sequence role'] == 'T1C'].copy()
 t1c['th'] = pd.to_numeric(t1c['Slice thickness (mm)'], errors='coerce')
 thin = set(t1c.loc[t1c.th <= 1.2, 'Patient'])
@@ -176,8 +176,8 @@ mthin = pd.Index(X.index).isin(list(thin))
 log('  thin subset n=%d  Siemens=%d GE=%d' % (mthin.sum(), (vendor[mthin] == 'Siemens').sum(), (vendor[mthin] == 'GE').sum()))
 
 def kw_bh(Xsub, g):
-    """向量化 Kruskal-Wallis (两群) + BH-FDR; g 为 0/1 群标签.
-    输入须无缺失 (调用前按特征中位数填补, 见下)."""
+    """Vectorised Kruskal-Wallis (two groups) + BH-FDR; g is the 0/1 group label.
+    The input must be complete (impute by the feature median before calling, as below)."""
     A = Xsub.values.astype(float)
     rk = rankdata(A, axis=0)
     n_ = A.shape[0]
@@ -185,7 +185,7 @@ def kw_bh(Xsub, g):
     r1 = rk[g == 1].sum(axis=0); r0 = rk[g == 0].sum(axis=0)
     mu = (n_ + 1) / 2.0
     H = 12.0 / (n_ * (n_ + 1)) * (n1_ * (r1 / n1_ - mu) ** 2 + n2_ * (r0 / n2_ - mu) ** 2)
-    # tie correction (与排列无关, 只算一次)
+    # tie correction (independent of the permutation, so computed once)
     ties = np.zeros(A.shape[1])
     for j in range(A.shape[1]):
         _, cnt = np.unique(A[:, j], return_counts=True)
@@ -199,7 +199,7 @@ def kw_bh(Xsub, g):
     q = ps * len(ps) / (np.arange(len(ps)) + 1)
     q = np.minimum.accumulate(q[::-1])[::-1]
     qfull = np.empty(len(ps)); qfull[order] = q
-    # rank-biserial 效应量: r = 2*U1/(n1*n2) - 1, U1 = R1_sum - n1(n1+1)/2
+    # rank-biserial effect size: r = 2*U1/(n1*n2) - 1, with U1 = R1_sum - n1(n1+1)/2
     U1 = r1 - n1_ * (n1_ + 1) / 2.0
     eff = 2.0 * U1 / (n1_ * n2_) - 1.0
     return p, qfull, eff
@@ -213,7 +213,7 @@ R['vendor_effect_within_thin3D'] = {
     'median_abs_effect': round(float(np.median(np.abs(eff_thin))), 3)}
 log('  %s' % json.dumps(R['vendor_effect_within_thin3D']))
 
-# ================= R1-M6: 定量批次指标 =================
+# ================= R1-M6: quantitative batch metrics =================
 log('\n=== [4] quantitative batch metrics (ASW + permutation) ===')
 from sklearn.metrics import silhouette_score
 Xs = StandardScaler().fit_transform(SimpleImputer(strategy='median').fit_transform(X))
@@ -232,12 +232,12 @@ R['asw'] = {
 log('  ASW vendor=%.4f (perm p=%.4f, null mean %.4f)  ASW MGMT=%.4f (perm p=%.4f, null mean %.4f)' %
     (asw_v, R['asw']['vendor']['perm_p'], nv.mean(), asw_y, R['asw']['mgmt']['perm_p'], ny.mean()))
 
-# PCA 方差占比: 厂商 vs 标签
+# PCA variance share: vendor vs label
 from sklearn.decomposition import PCA
 pcs = PCA(n_components=10, random_state=SEED).fit(Xs)
 Z = pcs.transform(Xs)
 def eta_sq(Zk, g):
-    """各组间变异占 SS_total 的比例 (eta-squared)"""
+    """Share of the between-group variance in SS_total (eta-squared)"""
     gm = Zk.mean(axis=0)
     ss_tot = ((Zk - gm) ** 2).sum()
     ss_bet = 0.0
@@ -253,7 +253,7 @@ R['pca_variance_between_groups'] = {
     'mgmt_between_group_share_pc1_10': round(eta_y_tot, 4)}
 log('  PC1-10 vendor between-group share=%.4f  MGMT share=%.4f' % (eta_v_tot, eta_y_tot))
 
-# BH-FDR 显著特征数的标签置换零分布 (保留特征相关结构: 整行置换厂商标签)
+# Label-permutation null distribution of the number of BH-FDR-significant features (correlation structure preserved: whole rows of vendor labels are permuted)
 log('  permutation null for BH-FDR q<0.05 feature count (200 perms)')
 gfull = (vendor == 'GE').astype(int)
 cnt_raw, cnt_q = [], []
@@ -276,9 +276,9 @@ log('  %s' % json.dumps(R['permutation_null_fdr_count']))
 # ================= DeLong + NRI/IDI =================
 log('\n=== [5] DeLong test (radiomics vs clinical) + NRI/IDI ===')
 pred = pd.read_csv(os.path.join(ANA, 'predictions.csv'), encoding='utf-8-sig')
-pred['patient'] = [to_id(p) for p in pred['patient']]  # 落盘表统一归一化为 Pxxx
+pred['patient'] = [to_id(p) for p in pred['patient']]  # written tables are normalised to Pxxx
 pred = pred.set_index('patient').loc[X.index]
-# predictions.csv 只存了临床基线最后一次重复的 OOF; 为与影像组学的 5 次重复均值 OOF 口径一致, 这里重算
+# predictions.csv holds only the OOF vector of the last repeat for the clinical baseline; recomputed here so that it matches the 5-repeat mean OOF convention used for radiomics
 from sklearn.pipeline import Pipeline
 Xcl5 = pd.DataFrame({'age': age, 'male': male}, index=X.index)
 pclin = np.zeros(len(y))
@@ -291,14 +291,14 @@ for r in range(5):
         pipe.fit(Xcl5.iloc[tr], y[tr]); pa[te] = pipe.predict_proba(Xcl5.iloc[te])[:, 1]
     pclin += pa
 pclin /= 5.0
-log('  clinical 5-repeat pooled OOF AUC = %.4f (predictions.csv 单次重复口径为 %.4f)' %
+log('  clinical 5-repeat pooled OOF AUC = %.4f (single-repeat value in predictions.csv = %.4f)' %
     (roc_auc_score(y, pclin), roc_auc_score(y, pred['prob_clinical'].values)))
 
 def delong_var(y_true, p):
     order = np.argsort(-p)
     ys = y_true[order]; ps = p[order]
     n1_ = int(ys.sum()); n0_ = len(ys) - n1_
-    # 按正类/负类的 mid-rank 结构计算 V10, V01
+    # compute V10 and V01 from the mid-rank structure of the positive and negative classes
     pos = ys == 1; neg = ys == 0
     ph = ps[pos]; pn = ps[neg]
     def phi(x, yv):
@@ -312,7 +312,7 @@ def delong_var(y_true, p):
 def delong_test(y_true, p1, p2):
     a1 = roc_auc_score(y_true, p1); a2 = roc_auc_score(y_true, p2)
     v01 = delong_var(y_true, p1); v02 = delong_var(y_true, p2)
-    # 协方差 (Delong): 用联合结构
+    # covariance (DeLong): from the joint structure
     n = len(y_true); n1_ = int(y_true.sum()); n0_ = n - n1_
     def comps(p):
         order = np.argsort(-p); ys = y_true[order]; ps = p[order]
@@ -343,7 +343,7 @@ def nri_idi(y_true, p_new, p_old, cut=0.5):
     up_n = ((p_new > p_old) & ne).sum() / ne.sum(); dn_n = ((p_new < p_old) & ne).sum() / ne.sum()
     nri = (up_e - dn_e) + (dn_n - up_n)
     idi = (p_new[ev].mean() - p_new[ne].mean()) - (p_old[ev].mean() - p_old[ne].mean())
-    # 置换 p
+    # permutation p
     rng2 = np.random.default_rng(SEED); null = []
     for _ in range(2000):
         yt = rng2.permutation(y_true)
@@ -363,7 +363,7 @@ R['nri_idi'] = {
 }
 log('  ' + json.dumps(R['nri_idi'], indent=2))
 
-# ================= 联合模型一致性机制核验 =================
+# ================= mechanism check for the combined model =================
 log('\n=== [6] combined-model identity: inner selection returns the same feature set ===')
 Xcl = pd.DataFrame({'age': age, 'male': male}, index=X.index)
 Xcomb = pd.concat([X, Xcl], axis=1)
@@ -382,7 +382,7 @@ for r in range(5):
         order = sorted(auc, key=auc.get, reverse=True)[:200]
         if 'age' in order or 'male' in order:
             in_top200 += 1
-            # 完整内层筛选 (去相关 + max_keep=40)
+            # full inner screening (de-correlation + max_keep=40)
             kept, rk = [], Xtr[order].rank()
             for c in order:
                 if all(abs(rk[c].corr(rk[k])) <= .90 for k in kept):
@@ -395,11 +395,13 @@ R['combined_model_identity'] = {
     'folds_where_age_or_male_in_top200': in_top200,
     'folds_where_age_or_male_in_final_set': in_final,
     'max_abs_diff_predictions': 0.0,
-    'explanation': ('联合模型 = age+sex+4148 组学特征, 走与纯影像组学完全相同的内层筛选链 '
-                    '(单变量|AUC-0.5| top200 -> |Spearman|>0.9 贪心去相关 -> 至多 40 特征)。'
-                    '25 个外折中 age/sex 仅 %d 次进入前 200、从未进入最终特征集, 故每折选出的 '
-                    '特征集与纯影像组学模型完全相同, 逐例预测概率 bit 级一致 (max|Δp|=0), '
-                    'AUC/Brier/CI 因此完全相同。' % in_top200)}
+    'explanation': ('The combined model is age + sex + the 4148 radiomic features and runs the '
+                    'identical inner screening chain (univariate |AUC-0.5| top 200 -> greedy '
+                    'de-correlation at |Spearman| > 0.9 -> at most 40 features). Across the 25 '
+                    'outer folds age and sex entered the top 200 only %d times and never entered '
+                    'the final feature set, so each fold selected exactly the same features as the '
+                    'radiomics-only model and the per-case probabilities agree bit for bit '
+                    '(max|dp| = 0); AUC/Brier/CI are therefore identical.' % in_top200)}
 log('  age/male in top200: %d/%d folds; in final <=40 set: %d' % (in_top200, n_folds, in_final))
 
 json.dump(R, open(os.path.join(ANA, 'review_metrics.json'), 'w'), indent=2, ensure_ascii=False)

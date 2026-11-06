@@ -1,21 +1,23 @@
 # -*- coding: utf-8 -*-
 r"""
-Table S1 重建为 n=90（等价路径，不依赖原始 DICOM 盘）
+Table S1 rebuilt at n=90 via an equivalent path that does not depend on the original DICOM drive
 
-背景：E:\NeuroImagepre 为外置盘，本次离线不可读；但既有 S1b（91 例 × 3 序列 = 273 行）
-的逐行采集参数本就是直接读源 DICOM 头得到的，且这些参数只依赖"该例实际使用的那条序列"，
-不随队列口径变化。因此：
-  1) 精确剔除被排除病例（United Imaging 1.5T 单例 P021）的 3 行 -> 270 行 / 90 例
-  2) 用与原脚本完全相同的汇总逻辑重算 S1a（按 T1c 实测厂商分组）与 S1c（机型技术签名）
-  3) 同步过滤几何校验日志
-校验：被保留行的全部字段与既有 S1b 逐字段一致（脚本内断言）。
+Background: E:\NeuroImagepre is an external drive and was unreadable offline at that point; but the per-row
+acquisition parameters of the existing S1b (91 cases x 3 sequences = 273 rows) were themselves read straight from
+the source DICOM headers, and they depend only on "the series this case actually used", not on how the cohort is
+defined. Therefore:
+  1) drop exactly the 3 rows of the excluded case (the single United Imaging 1.5T case, P021) -> 270 rows / 90 cases
+  2) recompute S1a (grouped by the measured T1c vendor) and S1c (model technical signature) with exactly the same
+     aggregation logic as the original script
+  3) filter the geometry-check log in step
+Verification: every field of every retained row matches the existing S1b field for field (asserted in the script).
 
-输出：tables/S1a_paper1_by_vendor.csv, S1b_paper1_per_case.csv, S1c_paper1_vendor_signature.csv
+Output: tables/S1a_paper1_by_vendor.csv, S1b_paper1_per_case.csv, S1c_paper1_vendor_signature.csv
       logs/s1_paper1_geometry_check.csv
 """
 import os as _os, sys as _sys
 _sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), '..', 'tools'))
-from patient_ids import to_name   # noqa: E402  患者编号 <-> 本地姓名
+from patient_ids import to_name   # noqa: E402  patient code <-> local name
 import os
 import pandas as pd
 
@@ -23,41 +25,41 @@ PROJ = r'D:\WorkBuddy\2026-10-06-10-35-00\outputs\paper1'
 OUT = os.path.join(PROJ, 'supplementary', 'tables')
 LOG = os.path.join(PROJ, 'supplementary', 'logs')
 
-# 被排除的单例 United Imaging 1.5T（编号 P021）；本表 Patient 列为本地目录名，故还原
-EXCLUDE = {to_name('P021')}   # 本地姓名对照见 tools/patient_ids_local.csv
+# The excluded United Imaging 1.5T single case (code P021); the Patient column here holds local directory names, so it is mapped back
+EXCLUDE = {to_name('P021')}   # local names: see tools/patient_ids_local.csv
 N_EXPECT = 90
 
 S1B = os.path.join(OUT, 'S1b_paper1_per_case.csv')
 GEO = os.path.join(LOG, 's1_paper1_geometry_check.csv')
 
 df_full = pd.read_csv(S1B, encoding='utf-8-sig')
-print('既有 S1b: %d 行 / %d 例' % (len(df_full), df_full.Patient.nunique()))
+print('existing S1b: %d rows / %d cases' % (len(df_full), df_full.Patient.nunique()))
 
-# ---------- 1) 精确剔除 ----------
+# ---------- 1) drop exactly ----------
 df = df_full[~df_full.Patient.isin(EXCLUDE)].copy()
-assert len(df_full) - len(df) == 3, '被排除病例应恰好占 3 行'
-assert df.Patient.nunique() == N_EXPECT, '剩余例数应为 %d' % N_EXPECT
-print('剔除后: %d 行 / %d 例' % (len(df), df.Patient.nunique()))
+assert len(df_full) - len(df) == 3, 'the excluded case should account for exactly 3 rows'
+assert df.Patient.nunique() == N_EXPECT, 'the remaining case count should be %d' % N_EXPECT
+print('after exclusion: %d rows / %d cases' % (len(df), df.Patient.nunique()))
 
-# 校验：保留行与原表逐字段一致
+# verification: retained rows match the original table field for field
 keep_mask = df_full.Patient.isin(set(df.Patient))
 chk = df_full[keep_mask].reset_index(drop=True).astype(str)
 cur = df.reset_index(drop=True).astype(str)
-assert chk.shape == cur.shape and (chk.values == cur.values).all(), '字段一致性校验失败'
-print('字段一致性校验: 通过（保留行与原表完全相同）')
+assert chk.shape == cur.shape and (chk.values == cur.values).all(), 'field consistency check failed'
+print('field consistency check: passed (retained rows identical to the original table)')
 
 df.to_csv(S1B, index=False, encoding='utf-8-sig')
 
-# ---------- 2) 几何校验日志过滤 ----------
+# ---------- 2) filter the geometry-check log ----------
 geo_full = pd.read_csv(GEO, encoding='utf-8-sig')
 geo = geo_full[~geo_full.patient.isin(EXCLUDE)].copy()
-print('几何日志: %d -> %d 行' % (len(geo_full), len(geo)))
+print('geometry log: %d -> %d rows' % (len(geo_full), len(geo)))
 dm = geo['dim_match'].astype(str).str.lower() == 'true'
 sp = geo['spacing_match'].astype(str).str.lower() == 'true'
 print('  dim_match True: %d/%d ; spacing_match True: %d/%d' % (dm.sum(), len(geo), sp.sum(), len(geo)))
 geo.to_csv(GEO, index=False, encoding='utf-8-sig')
 
-# ---------- 3) 重算 S1a ----------
+# ---------- 3) recompute S1a ----------
 def fmt_med(x, dec=1):
     x = pd.to_numeric(x, errors='coerce').dropna()
     if len(x) == 0:
@@ -71,7 +73,7 @@ df['_Grp'] = df.Patient.map(t1c_vendor)
 vend = [v for v in order if v in set(df._Grp.dropna())]
 ALLCOL = 'All (n=%d)' % df.Patient.nunique()
 VCOL = {v: '%s (n=%d)' % (v, df[df._Grp == v].Patient.nunique()) for v in vend}
-print('厂商分组(按T1c实测):', {v: df[df._Grp == v].Patient.nunique() for v in vend})
+print('vendor groups (measured on T1c):', {v: df[df._Grp == v].Patient.nunique() for v in vend})
 
 lines = []
 
@@ -126,7 +128,7 @@ s1a.to_csv(os.path.join(OUT, 'S1a_paper1_by_vendor.csv'), index=False, encoding=
 print('\n=== S1a ===')
 print(s1a.to_string(index=False))
 
-# ---------- 4) 重算 S1c ----------
+# ---------- 4) recompute S1c ----------
 sc = df.groupby(['Vendor', 'Model', 'Field strength (T)']).agg(
     n_sequences=('Patient', 'size'),
     n_patients=('Patient', 'nunique'),
@@ -137,12 +139,12 @@ sc.to_csv(os.path.join(OUT, 'S1c_paper1_vendor_signature.csv'), index=False, enc
 print('\n=== S1c ===')
 print(sc.to_string(index=False))
 
-print('\nQC flag 分布 (270 行):')
+print('\nQC flag distribution (270 rows):')
 print(df['QC flag'].value_counts().to_string())
-print('\n队列厂商分布（按病例，T1c 实测）:')
+print('\nvendor distribution of the cohort (by case, measured on T1c):')
 print(df.drop_duplicates('Patient').Vendor.value_counts().to_string())
-print('\n声明 label vs 实测 不一致:')
+print('\ndeclared label vs measurement, mismatches:')
 pv = df.drop_duplicates('Patient')[['Patient', 'Vendor', 'Vendor (Paper 1 label)']]
 mism = pv[pv.Vendor != pv['Vendor (Paper 1 label)']]
-print(mism.to_string(index=False) if len(mism) else '  无')
+print(mism.to_string(index=False) if len(mism) else '  none')
 print('\nDONE (S1 rebuilt at n=90)')

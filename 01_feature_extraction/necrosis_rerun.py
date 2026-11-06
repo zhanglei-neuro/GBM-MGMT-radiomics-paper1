@@ -1,17 +1,21 @@
 # -*- coding: utf-8 -*-
-r"""Necrosis 单序列(t1c)变体重跑
-背景: 原批跑中 MRI_Necrosis 自动选型按变体名长度取最后一个匹配项, t1d 缺失被跳过,
-导致三序列输入命中 t1c_t1w_t2f_t1d 四序列变体, 静默输出空掩码(103例全空)。
-方案: 搭建暂存模型库 models_nec_t1c\MRI_Necrosis\ 仅含 t1c 子目录, 强制选型命中单序列变体;
-MRI_Brain 一并拷入(t1c 管线第一步需要 T1-CE 上的脑分割)。
-输出: D:\Raidionics_data\patients_nec2\2\<p>\T0\  (独立目录, 不触碰已验证的主结果树)
-断点续跑: 输出 T0 中已存在 *Necrosis*.nii.gz 的患者跳过。
-计时: necrosis_timing.csv
+r"""Necrosis re-run with the single-sequence (t1c) variant
+
+Background: in the original batch, automatic variant selection for MRI_Necrosis took the last match by variant-name
+length and skipped the missing t1d, so three-sequence input fell through to the four-sequence
+t1c_t1w_t2f_t1d variant and silently wrote empty masks (all 103 cases empty).
+Approach: build a staging model library models_nec_t1c\MRI_Necrosis\ that contains only a t1c subdirectory, which
+forces selection onto the single-sequence variant; copy MRI_Brain in as well, since the first step of the t1c
+pipeline needs a brain segmentation on T1-CE.
+Output: D:\Raidionics_data\patients_nec2\2\<p>\T0\  (a separate directory; the validated main results tree is
+untouched)
+Resumable: patients whose output T0 already holds *Necrosis*.nii.gz are skipped.
+Timing: necrosis_timing.csv
 """
 import os, sys, csv, json, time, traceback, configparser, logging
 import shutil as _shutil
 
-# ---- 与 run_pipeline.py 相同的改名补丁(被监控树内运行时防钩子拦截; 计划任务环境由包装脚本关闭) ----
+# ---- same rename patch as run_pipeline.py (guards the tree while it is watched; the batch wrapper turns it off under Task Scheduler) ----
 _TRASH_SEQ = [0]
 def _rmtree_rename(path, ignore_errors=False, onerror=None, **kw):
     if not os.path.isdir(path):
@@ -19,7 +23,7 @@ def _rmtree_rename(path, ignore_errors=False, onerror=None, **kw):
             return
         raise FileNotFoundError(path)
     _TRASH_SEQ[0] += 1
-    path = path.rstrip('/\\')  # 尾部分隔符会让 os.rename 报 WinError 87
+    path = path.rstrip('/\\')  # a trailing separator makes os.rename raise WinError 87
     trash = f"{path}_trash_{os.getpid()}_{_TRASH_SEQ[0]}"
     try:
         os.rename(path, trash)
@@ -64,7 +68,7 @@ OUT_ROOT = os.path.join(WORK_ROOT, 'patients_nec2')
 
 
 def build_staging_models(logger=print):
-    """拷贝 MRI_Necrosis/t1c 与 MRI_Brain 到暂存模型库(幂等)。"""
+    """Copy MRI_Necrosis/t1c and MRI_Brain into the staging model library (idempotent)."""
     src_nec = os.path.join(REAL_MODELS, 'MRI_Necrosis', 't1c')
     src_brain = os.path.join(REAL_MODELS, 'MRI_Brain')
     dst_nec = os.path.join(STAGING_MODELS, 'MRI_Necrosis', 't1c')
@@ -193,7 +197,7 @@ def main():
     write_pipeline_json()
     build_staging_models()
 
-    # 队列 = 主批跑状态为 OK 的患者(103例)
+    # cohort = the patients whose main-batch status is OK (103 cases)
     cohort = []
     for r in csv.DictReader(open(MAIN_TIMING, encoding='utf-8-sig')):
         if r['status'] == 'OK' and r['patient'] not in cohort:
@@ -214,7 +218,7 @@ def main():
             flush({'patient': p, 'status': 'ERROR', 'Note': f'input missing ({len(niftis)} nifti)'})
             print("  ERROR: input missing", flush=True)
             continue
-        # 整体重命名旧输出目录(非破坏), 确保全新运行
+        # rename the old output directory wholesale (non-destructive) so that the run starts clean
         if os.path.isdir(output_folder):
             _TRASH_SEQ[0] += 1
             try:

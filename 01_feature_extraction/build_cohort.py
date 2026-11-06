@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
-"""阶段0收尾: 锁定 MGMT 建模队列
-- 以 segmentation_timing.csv status=OK 的 103 例为基准
-- 关联合并表(标签/厂商/临床), 校验掩码齐全度(TumorCore/Edema/FLAIRChanges + Necrosis新掩码)
-- 输出 cohort_all_103.csv 与 cohort_MGMT.csv
+r"""Stage 0 wrap-up: freeze the MGMT modelling cohort
+- start from the 103 cases with status=OK in segmentation_timing.csv
+- join the merged table (label/vendor/clinical) and check mask completeness (TumorCore/Edema/FLAIRChanges + the new Necrosis mask)
+- write cohort_all_103.csv and cohort_MGMT.csv
 """
 import os, csv
 import pandas as pd
@@ -64,7 +64,7 @@ for p in ok_patients:
     }
     r['mask_ok'] = all(v for v in masks.values())
     r['missing_mask'] = ','.join(k for k, v in masks.items() if not v)
-    # 空坏死掩码记录(体积=0 属合法结局, 但单独标记)
+    # cases with an empty necrosis mask (volume = 0 is a legitimate outcome, but they are flagged separately)
     if masks['Necrosis']:
         a = sitk.GetArrayFromImage(sitk.ReadImage(masks['Necrosis']))
         r['necrosis_voxel'] = int((a > 0).sum())

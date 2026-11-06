@@ -1,13 +1,15 @@
 # -*- coding: utf-8 -*-
-r"""Paper 1 -- 敏感性分析（单队列并行版）
-用法: python sens_one.py <A|B|C|D>   # E 队列(IDH 野生型)已于 2026-10-11 撤销
-输出: analysis/sens_cohort_<tag>.json
-与 sens_exclude_uiH_and_qc.py 完全同管线（同 SEED / CV 结构 / 特征筛选），
-仅将 4 个队列拆分为 4 个独立进程以便并行加速。
+r"""Paper 1 -- sensitivity analyses (one cohort per process, for parallelism)
+
+Usage: python sens_one.py <A|B|C|D>   # cohort E (IDH wild-type) was withdrawn on 2026-10-11
+Output: analysis/sens_cohort_<tag>.json
+
+Identical pipeline to the combined sensitivity script (same SEED / CV structure / feature screening); the only
+change is that the four cohorts are split into four processes so they can run in parallel.
 """
 import os as _os, sys as _sys
 _sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), '..', 'tools'))
-from patient_ids import to_id   # noqa: E402  患者编号 <-> 本地姓名
+from patient_ids import to_id   # noqa: E402  patient code <-> local name
 import os, sys, json, warnings
 import numpy as np
 import pandas as pd
@@ -34,7 +36,7 @@ Xall = df.pivot_table(index='patient', columns='feat', values='value', aggfunc='
 co = pd.read_csv(os.path.join(SRC, 'cohort_MGMT.csv'), encoding='utf-8-sig')
 co['y'] = co['MGMT'].astype(str).str.strip().map(lambda s: 1 if s.startswith('+') else 0)
 co = co.set_index('patient')
-co.index = [to_id(p) for p in co.index]        # 数据键统一为 Pxxx
+co.index = [to_id(p) for p in co.index]        # all data keys are Pxxx
 Xall.index = [to_id(p) for p in Xall.index]
 common = [p for p in co.index if p in Xall.index]
 X = Xall.loc[common].copy()
@@ -127,7 +129,7 @@ def run_cohort(mask, label):
         m, s = rep_nested(name, Xc, yc)
         res['models'][name] = {'auc': round(m, 4), 'sd': round(s, 4)}
         print('[%s] %-13s AUC=%.4f' % (label, name, m), flush=True)
-    # 临床基线（单次重复的合并 OOF，与原脚本一致）
+    # clinical baseline (single-repeat pooled OOF, as in the original script)
     Xcl = pd.DataFrame({'age': age[mask], 'male': male[mask]}, index=Xc.index)
     p = np.zeros(len(yc))
     for r in range(REPEATS):
@@ -148,15 +150,15 @@ def run_cohort(mask, label):
     return res
 
 
-# ---------- 队列定义（与原脚本一致） ----------
+# ---------- cohort definitions (as in the original script) ----------
 idx = pd.Index(X.index)
 uiH = np.array([str(co.loc[p, 'vendor']).strip() == 'UIH'
-                for p in idx])   # 按 vendor 判断, 不按姓名
-# 2026-10-11: 原 E 队列（剔除 IDH 突变病例）已撤销——经作者确认，源数据库 IDH 字段的
-# 6 例"突变型"为录入错误，全队列 89 例均为 IDH 野生型，故不存在可剔除的 IDH 突变病例。
+                for p in idx])   # decided by vendor, not by name
+# 2026-10-11: the former cohort E (IDH-mutant cases removed) is withdrawn. The authors confirmed that the six
+# "mutant" IDH records were entry errors and that all 89 cases are IDH wild-type, so there are no mutant cases to remove.
 
 s1b = pd.read_csv(os.path.join(OUT, 'supplementary/tables/S1b_paper1_per_case.csv'))
-s1b['Patient'] = [to_id(p) for p in s1b['Patient']]   # 与 idx 同一命名空间
+s1b['Patient'] = [to_id(p) for p in s1b['Patient']]   # same namespace as idx
 t1c = s1b[s1b['Sequence role'] == 'T1C'].copy()
 t1c['th'] = pd.to_numeric(t1c['Slice thickness (mm)'], errors='coerce')
 thin = set(t1c.loc[t1c.th <= 1.2, 'Patient'])

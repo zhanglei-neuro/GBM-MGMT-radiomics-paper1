@@ -1,25 +1,25 @@
-# 工具 (Tools)
+# Tools
 
-`patient_ids.py` 患者标识归一化（编号 ↔ 本地姓名、按厂商排除单例病例）；
-`check_phi.py` 上传前患者隐私自检；`sanitize_phi.py` 姓名占位符替换；
-`configure_paths.py` 批量改写硬编码路径。
+`patient_ids.py` — normalises patient identifiers (public code ↔ local name) and excludes the single case by vendor;
+`check_phi.py` — pre-push privacy self-check; `sanitize_phi.py` — replaces names with the placeholder;
+`configure_paths.py` — rewrites the hard-coded paths in bulk.
 
-**每次 `git push` 之前请先运行 `check_phi.py`。**
+**Run `check_phi.py` before every `git push`.**
 
-## 本目录文件
+## Files in this folder
 
-- `patient_ids.py` —— 被 01/02/03/06/07/08/09 共 18 个脚本导入，见仓库 README §4
-- `patient_alias_local.csv.example` —— 临床表拼写变体表模板（可选）
+- `patient_ids.py` — imported by 18 scripts across 01/02/03/06/07/08/09; see §4 of the repository README
+- `patient_alias_local.csv.example` — template for the clinical-table spelling variants (optional)
 - `check_phi.py`
 - `configure_paths.py`
 - `sanitize_phi.py`
 
-## 本地运行需要的对照表（**不要提交**）
+## Lookup tables needed for a local run (**do not commit**)
 
-| 文件 | 内容 | 获取方式 |
+| File | Content | How to obtain it |
 |---|---|---|
-| `patient_ids_local.csv` | 两列 `patient_id_public,patient_name_original` | 从你的安全位置复制到此，或设 `PAPER1_PATIENT_MAP` 指向它 |
-| `patient_alias_local.csv` | 两列 `clinical_name,patient_id_public`（临床表与队列目录名拼写不一致者） | 同上，或设 `PAPER1_PATIENT_ALIAS` |
+| `patient_ids_local.csv` | two columns, `patient_id_public,patient_name_original` | copy it here from your secure location, or point `PAPER1_PATIENT_MAP` at it |
+| `patient_alias_local.csv` | two columns, `clinical_name,patient_id_public` (for cases whose name is spelt differently in the clinical table and the cohort directory) | as above, or set `PAPER1_PATIENT_ALIAS` |
 
-两者都已列入 `.gitignore`。缺少第一个文件时脚本会退化为"标识原样使用"，
-即只能读取已使用 `P001`–`P109` 编号的发布版数据。
+Both are listed in `.gitignore`. Without the first file the scripts fall back to using identifiers as they
+are, which means they can only read released data that already uses the `P001`–`P109` codes.
