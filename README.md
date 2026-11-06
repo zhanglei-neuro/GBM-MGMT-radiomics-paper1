@@ -25,7 +25,7 @@ pipeline from DICOM inventory to the final figures and tables.
 | `07_acquisition_geometry_qc/` | Per-case/per-series acquisition parameter tables (Tables S1a–S1c, S2a–S2d, S3) and geometry consistency checks |
 | `08_sensitivity_and_power/` | MDES power analysis (Hanley–McNeil), stronger clinical baselines, cohort- and geometry-stratified sensitivity analyses |
 | `09_figures_and_tables/` | Generation of main Figures 1–6 (two of them composites), main Table 1, supplementary Figures S1–S4 and Tables S1–S7 |
-| `10_reporting/` | Markdown → Word rendering of the manuscript and the response letter; revision patches |
+| `10_reporting/` | Markdown → journal-style Word rendering of the manuscript; revision log |
 | `tools/` | Safety and reproducibility helpers (see §4) |
 | `tools/patient_ids.py` | Patient-identifier normalisation — **required by most scripts**, see §4 |
 
@@ -105,8 +105,8 @@ pipeline from DICOM inventory to the final figures and tables.
 ### 10_reporting
 | Script | Purpose |
 |---|---|
-| `render_manuscript_docx.py`, `render_response_docx.py` | Markdown → Word rendering of the manuscript and the response letter |
-| `patch_manuscript_revision.py`, `patch_response_revision.py` | Textual revision patches applied during peer review |
+| `render_manuscript_docx.py` | Markdown → journal-style Word rendering of the manuscript |
+| `REVISION_LOG.md` | Chronological log of code changes made during peer review |
 
 ## 3. Environment
 
@@ -194,7 +194,7 @@ hard-coded path and what it should point to.
 | 05 | feature matrix + batch labels | `metrics_combat.json` |
 | 06 | segmentation masks | `per_case_volumes.csv`, `metrics_volume.json` |
 | 08 | feature matrix + labels | `review_metrics.json`, `sens_cohort_*.json` |
-| 09 | all of the above | Figures 1–8, Tables 1–3, S1–S7 |
+| 09 | all of the above | Figures 1–6, Tables 1–3, S1–S7 |
 
 ## 7. Citation
 
