@@ -1,19 +1,20 @@
 # -*- coding: utf-8 -*-
-r"""Paper 1 - composite main figures (Figure 2 and Figure 5 of the six-figure set)
+r"""Paper 1 - composite main figures (Figure 3 of the six-figure set, and ESM Figure S5)
 
 The submission uses six main figures. Four of them are the single-purpose panels produced by
 `make_main_figures.py` (Figures 1, 3, 4 and 6 of the new numbering). The two composites built here
 combine panels that are read together:
 
-    Figure 2  (a) ROC curves   (b) calibration   (c) decision curve analysis
-    Figure 5  (a) SHAP importance   (b) AUC heat map by ROI x sequence   (c) main combinations
+    Figure 3  (a) ROC curves   (b) calibration   (c) decision curve analysis
+    Fig. S5   (a) SHAP importance   (b) AUC heat map by ROI x sequence   (c) main combinations
+              (exploratory; moved out of the main set for the European Radiology version)
 
 Panels are redrawn from the same analysis products as `make_main_figures.py`, at print width
 (7 in) so that the 7-8.5 pt type is not scaled down when the figure is placed on the page.
 
 Run: D:\Anaconda\python.exe make_composite_main_figures.py
-Output: paper1/figures/Figure2_discrimination_ROC_cal_DCA.png
-        paper1/figures/Figure5_exploratory_SHAP_ROI_sequence.png
+Output: paper1/figures/Figure3_discrimination_ROC_cal_DCA.png
+        paper1/supplementary_figures/FigureS5_exploratory_SHAP_ROI_sequence.png
 """
 import os as _os, sys as _sys
 _sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), '..', 'tools'))
@@ -35,6 +36,7 @@ warnings.filterwarnings('ignore')
 SRC = r'C:/Users/zhanglei/WorkBuddy/2026-09-18-22-15-57'
 OUT = r'D:/WorkBuddy/2026-10-06-10-35-00/outputs/paper1'
 ANA = os.path.join(OUT, 'analysis'); FIG = os.path.join(OUT, 'figures')
+SUPP = os.path.join(OUT, 'supplementary_figures')
 os.makedirs(FIG, exist_ok=True)
 SEED = 42
 plt.rcParams.update({'font.family': 'DejaVu Sans', 'font.size': 7.5, 'axes.titlesize': 8.5,
@@ -118,7 +120,7 @@ axc.set_xlabel('Threshold probability'); axc.set_ylabel('Net benefit')
 axc.set_ylim(-0.15, 0.5)
 axc.set_title('(c) Decision curve analysis', fontweight='bold', loc='left')
 axc.legend(frameon=False, fontsize=6.5, loc='upper right')
-fig.savefig(os.path.join(FIG, 'Figure2_discrimination_ROC_cal_DCA.png'))
+fig.savefig(os.path.join(FIG, 'Figure3_discrimination_ROC_cal_DCA.png'))
 plt.close()
 
 # ============ Figure 5: exploratory attribution and stratification ============
@@ -202,7 +204,7 @@ axc.set_xticklabels([k.replace('|', '\n') for k in keys], fontsize=6.5)
 axc.set_ylim(.4, .75); axc.set_ylabel('AUC')
 axc.set_title('(c) Main ROI × sequence combinations', fontweight='bold', loc='left')
 
-fig.savefig(os.path.join(FIG, 'Figure5_exploratory_SHAP_ROI_sequence.png'))
+fig.savefig(os.path.join(SUPP, 'FigureS5_exploratory_SHAP_ROI_sequence.png'))
 plt.close()
 
 log('COMPOSITE FIGURES DONE -> %s' % FIG)

@@ -1,11 +1,13 @@
 # Figures and tables
 
-Generates the main figures (six in the submitted set: four single panels plus two composites), the main table (Table 1) and the supplementary figures and tables (Figures S1–S4, Tables S1–S7) from the intermediate JSON/CSV results.
+Generates the main figures (six in the submitted set: one participant-flow diagram, four single panels and one composite), ESM Figure S5, the main table (Table 1) and the supplementary figures and tables (Figures S1–S4, Tables S1–S7) from the intermediate JSON/CSV results.
 
 ## Files in this folder
 
+- `make_figure1_flow.py` — Figure 1, the STARD-AI participant flow diagram (no data input; the
+  exclusion counts are hard-coded from Appendix B, section B2)
 - `make_main_figures.py`
-- `make_composite_main_figures.py`  (builds Figure 2 and Figure 5; see `figures/FIGURE_LEGENDS.md`)
+- `make_composite_main_figures.py`  (builds Figure 3 and ESM Figure S5; see `figures/FIGURE_LEGENDS.md`)
 - `make_supp_fig_S1_qc.py`
 - `make_supp_figs_S3_S4.py`
 - `make_supp_tables_S1_S4.py` — writes **Tables S2a–S2d** and the combined workbook
