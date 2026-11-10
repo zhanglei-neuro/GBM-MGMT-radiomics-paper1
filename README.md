@@ -96,7 +96,9 @@ pipeline from DICOM inventory to the final figures and tables.
 |---|---|
 | `make_figure1_flow.py` | Figure 1 (STARD-AI participant flow diagram, drawn from the exclusion counts) |
 | `make_main_figures.py` | Source panels of Figures 2, 4, 5 and 6 |
-| `make_composite_main_figures.py` | Composite Figure 3 and ESM Figure S5 |
+| `make_composite_main_figures.py` | Composite Figure 3 (ROC + calibration + DCA) |
+| `make_figure6_volume_biomarkers.py` | Figure 6 (volumetric markers), from the Zenodo intermediates |
+| `make_figS5_shap_roi.py` | ESM Figure S5 (SHAP + ROI × sequence), from the Zenodo intermediates |
 | `make_table1_baseline.py` | Table 1 (baseline, by vendor) |
 | `make_supp_tables_S5_S7.py` | Tables S5–S7 |
 | `make_supp_tables_S1_S4.py` | Tables S1–S4 |
