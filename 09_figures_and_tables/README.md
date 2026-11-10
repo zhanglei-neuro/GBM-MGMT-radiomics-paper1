@@ -7,7 +7,13 @@ Generates the main figures (six in the submitted set: one participant-flow diagr
 - `make_figure1_flow.py` — Figure 1, the STARD-AI participant flow diagram (no data input; the
   exclusion counts are hard-coded from Appendix B, section B2)
 - `make_main_figures.py`
-- `make_composite_main_figures.py`  (builds Figure 3 and ESM Figure S5; see `figures/FIGURE_LEGENDS.md`)
+- `make_composite_main_figures.py` — Figure 3 (ROC + calibration + DCA composite; see
+  `figures/FIGURE_LEGENDS.md`)
+- `make_figure6_volume_biomarkers.py` — Figure 6, all three panels, rebuilt from the deposited
+  Zenodo intermediates (`02_predictions_and_volumes/`, `03_intermediate_results/table3_main.csv`)
+  without any raw-DICOM path
+- `make_figS5_shap_roi.py` — ESM Figure S5 (SHAP importance plus AUC by ROI × sequence), also
+  rebuilt from the deposited intermediates only
 - `make_supp_fig_S1_qc.py`
 - `make_supp_figs_S3_S4.py`
 - `make_supp_tables_S1_S4.py` — writes **Tables S2a–S2d** and the combined workbook
