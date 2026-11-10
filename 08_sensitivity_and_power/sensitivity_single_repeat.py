@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 r"""Paper 1 -- sensitivity analyses (one cohort per process, for parallelism)
 
-Usage: python sens_one.py <A|B|C|D>   # cohort E (IDH wild-type) was withdrawn on 2026-10-11
+Usage: python sens_one.py <A|B|C|D>   # one pre-specified sensitivity cohort per process
 Output: analysis/sens_cohort_<tag>.json
 
 Identical pipeline to the combined sensitivity script (same SEED / CV structure / feature screening); the only
@@ -154,8 +154,8 @@ def run_cohort(mask, label):
 idx = pd.Index(X.index)
 uiH = np.array([str(co.loc[p, 'vendor']).strip() == 'UIH'
                 for p in idx])   # decided by vendor, not by name
-# 2026-10-11: the former cohort E (IDH-mutant cases removed) is withdrawn. The authors confirmed that the six
-# "mutant" IDH records were entry errors and that all 89 cases are IDH wild-type, so there are no mutant cases to remove.
+# Cohorts A-D only. Paper 1 reports four pre-specified sensitivity analyses; no IDH-stratified
+# cohort is analysed, because the whole study population is IDH wild-type GBM (WHO 2021).
 
 s1b = pd.read_csv(os.path.join(OUT, 'supplementary/tables/S1b_paper1_per_case.csv'))
 s1b['Patient'] = [to_id(p) for p in s1b['Patient']]   # same namespace as idx

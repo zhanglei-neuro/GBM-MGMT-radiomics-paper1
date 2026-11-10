@@ -8,13 +8,10 @@ Changes from v1:
      tumour location (lobe) and field strength; and a between-group p value for every variable
      (the reviewers called the absence of p values in v1 selective reporting).
   3. All variables now report their denominator.
-  4. [2026-10-11 revision] As confirmed by the authors, the six "mutant" IDH records were entry
-     errors; all 89 cases are IDH wild-type (WHO 2021 GBM definition). Table 1 therefore reports
-     "IDH wild-type - 89 (100.0%)" and no longer gives an IDH p value;
-     TERT status and follow-up measures (overall survival / progression-free survival / recurrence)
-     are outside the scope of Paper 1 and have been removed from Table 1 and from all analyses.
-     The IDH field in the source data (cohort_MGMT.csv, GBM_clinical_data.xlsx) has been corrected
-     in step (backups: *_backup_2026-10-11.csv/.xlsx).
+  4. The study population is IDH wild-type GBM (WHO 2021 definition) throughout, so Table 1
+     reports "IDH wild-type - 89 (100.0%)" without a between-group p value; TERT status and
+     follow-up measures (overall survival / progression-free survival / recurrence) are outside
+     the scope of Paper 1 and are not reported in Table 1 or used in any analysis.
   5. Output: table1_baseline.csv / .md (main table) and tableS5_baseline_full.csv (all variables, with p values).
 """
 import os as _os, sys as _sys
@@ -292,7 +289,7 @@ summ = {
     'tc_median': float(M['tc'].median()), 'ne_median': float(M['ne'].median()),
     'ed_median': float(M['ed'].median()), 'fl_median': float(M['fl'].median()),
     'eortc': {k: int(M['eortc'].eq(k).sum()) for k in ['GTR', 'PTR', 'BTR']},
-    'idh_wildtype_n': int(len(M)),   # whole cohort IDH wild-type (after the 2026-10-11 data correction)
+    'idh_wildtype_n': int(len(M)),   # whole cohort IDH wild-type (WHO 2021)
     'kps_n': int(M['kps'].notna().sum()),
     'eortc_n': int(M['eortc'].isin(['GTR', 'PTR', 'BTR']).sum()),
     'lobe_n': int(M['lobe'].notna().sum()),

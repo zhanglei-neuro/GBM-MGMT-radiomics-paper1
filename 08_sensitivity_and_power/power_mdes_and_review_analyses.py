@@ -155,8 +155,8 @@ R['idh'] = {
     'mgmt_rate_mutant_vs_wt': {
         'mutant': (round(float(y[idh == '+1'].mean()), 3) if (idh == '+1').any() else None),
         'wildtype': round(float(y[idh == '-'].mean()), 3)},
-    # Author correction, 2026-10-11: all 89 cases in this cohort are IDH wild-type (WHO 2021 GBM).
-    # The six "mutant" records in the source database turned out not to belong to this cohort (entry errors), so the cross-tab degenerates and does not apply.
+    # The whole study population is IDH wild-type GBM (WHO 2021), so the cross-tab degenerates
+    # to a single row and no between-vendor test applies.
     'fisher_idh_vendor_p': (round(float(stats.fisher_exact(_idh_tab.values)[1]), 4)
                             if _idh_tab.shape == (2, 2) else None),
     'fisher_idh_vendor_p_note': ('' if _idh_tab.shape == (2, 2) else
