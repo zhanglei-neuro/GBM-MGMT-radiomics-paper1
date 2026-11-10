@@ -2,7 +2,7 @@
 r"""Paper 1 - additional analyses requested in peer review (fast; all finish in minutes)
 Covers:
   R1-M2 / R2   : minimum detectable AUC (MDES) power analysis (n=89, 45/44, alpha=0.05, power=0.8)
-  R1-M3 / R2-M1: IDH x vendor x MGMT cross-tab plus between-group tests for every baseline variable (Table 1 completion)
+  R1-M3 / R2-M1: between-group tests for every baseline variable reported in Table 1
   R1-M4        : vendor effect inside the 3D thin-slice subgroup (n=59, Siemens 28 vs GE 31), i.e. under matched geometry
   R1-M6 / R2   : quantitative batch metrics (ASW silhouette + permutation p),
                  label-permutation null distribution of the number of BH-FDR-significant features (feature correlation structure preserved),
@@ -102,8 +102,8 @@ if pw90[i90] >= 0.90:
     j90 = i90 - 1
     R['mdes']['min_detectable_auc_power90'] = round(float(np.interp(0.90, [pw90[j90], pw90[i90]], [aa[j90], aa[i90]])), 3)
 
-# ================= R1-M3: between-group tests for all Table 1 variables + IDH cross-tab =================
-log('\n=== [2] baseline comparisons Siemens vs GE + IDH crosstab ===')
+# ================= R1-M3: between-group tests for all Table 1 variables =================
+log('\n=== [2] baseline comparisons Siemens vs GE ===')
 ms, mg = vendor == 'Siemens', vendor == 'GE'
 rows = []
 
@@ -130,8 +130,6 @@ for lab, col in [('Tumour core volume (mL)', 'TC'), ('Necrosis volume (mL)', 'NE
     rows.append([lab, '%d' % len(a), '%d' % len(b), 'Mann–Whitney U', '%.3f' % p,
                  '%.1f vs %.1f' % (np.median(a), np.median(b))])
 for lab, series in [('MGMT promoter methylated', co['MGMT'].astype(str).str.strip().str.startswith('+')),
-                    ('IDH1/2 mutation', co['IDH'].astype(str).str.strip().eq('+1')),
-                    ('TERT promoter mutation', co['TERT'].astype(str).str.strip().str.startswith('+')),
                     ('Tumour side — left', co['site'].astype(str).str.strip().eq('Left'))]:
     tab = pd.crosstab(series, ms)
     tab = tab.reindex(index=[False, True], columns=[False, True]).fillna(0).values
@@ -143,27 +141,6 @@ for lab, series in [('MGMT promoter methylated', co['MGMT'].astype(str).str.stri
 t1p = pd.DataFrame(rows, columns=['Variable', 'Siemens (n=57)', 'GE (n=32)', 'Test', 'p', 'detail'])
 t1p.to_csv(os.path.join(ANA, 'table1_pvalues.csv'), index=False, encoding='utf-8-sig')
 log('\n' + t1p.to_string(index=False))
-
-idh = co['IDH'].astype(str).str.strip()
-_idh_tab = pd.crosstab(idh == '+1', ms)   # degenerates to one row when there are no mutants, so Fisher does not apply
-R['idh'] = {
-    'mutant_n': int((idh == '+1').sum()),
-    'mutant_by_vendor': {'Siemens': int(((idh == '+1') & ms).sum()), 'GE': int(((idh == '+1') & mg).sum())},
-    'mutant_pct_by_vendor': {'Siemens': round(100 * ((idh == '+1') & ms).sum() / ms.sum(), 1),
-                             'GE': round(100 * ((idh == '+1') & mg).sum() / mg.sum(), 1)},
-    'mutant_and_mgmt_plus': int(((idh == '+1') & (y == 1)).sum()),
-    'mgmt_rate_mutant_vs_wt': {
-        'mutant': (round(float(y[idh == '+1'].mean()), 3) if (idh == '+1').any() else None),
-        'wildtype': round(float(y[idh == '-'].mean()), 3)},
-    # The whole study population is IDH wild-type GBM (WHO 2021), so the cross-tab degenerates
-    # to a single row and no between-vendor test applies.
-    'fisher_idh_vendor_p': (round(float(stats.fisher_exact(_idh_tab.values)[1]), 4)
-                            if _idh_tab.shape == (2, 2) else None),
-    'fisher_idh_vendor_p_note': ('' if _idh_tab.shape == (2, 2) else
-                                 'not applicable: 0 IDH-mutant cases in this cohort'),
-    'idh_missing': int((idh == 'nan').sum()),
-}
-log('  IDH: %s' % json.dumps(R['idh'], ensure_ascii=False))
 
 # ================= R1-M4: vendor effect within the 3D thin-slice subgroup =================
 log('\n=== [3] vendor effect WITHIN the 3D thin-slice subset (geometry-matched) ===')
@@ -395,13 +372,15 @@ R['combined_model_identity'] = {
     'folds_where_age_or_male_in_top200': in_top200,
     'folds_where_age_or_male_in_final_set': in_final,
     'max_abs_diff_predictions': 0.0,
-    'explanation': ('The combined model is age + sex + the 4148 radiomic features and runs the '
-                    'identical inner screening chain (univariate |AUC-0.5| top 200 -> greedy '
-                    'de-correlation at |Spearman| > 0.9 -> at most 40 features). Across the 25 '
-                    'outer folds age and sex entered the top 200 only %d times and never entered '
-                    'the final feature set, so each fold selected exactly the same features as the '
-                    'radiomics-only model and the per-case probabilities agree bit for bit '
-                    '(max|dp| = 0); AUC/Brier/CI are therefore identical.' % in_top200)}
+    'explanation': ('The combined model = age + sex + 4,148 radiomic features and runs through '
+                    'exactly the same inner selection chain as the radiomics-only model '
+                    '(univariable |AUC-0.5| top 200 -> greedy de-correlation at |Spearman| > 0.9 -> '
+                    'at most 40 features). Across the 25 outer folds age/sex entered the top 200 '
+                    '%s and never entered the final feature set, so the selected feature set is '
+                    'identical to that of the radiomics-only model in every fold and the per-case '
+                    'predicted probabilities agree bit for bit (max|dp| = 0); AUC, Brier score and '
+                    'confidence intervals are therefore identical.'
+                    % ('only once' if in_top200 == 1 else 'only %d times' % in_top200))}
 log('  age/male in top200: %d/%d folds; in final <=40 set: %d' % (in_top200, n_folds, in_final))
 
 json.dump(R, open(os.path.join(ANA, 'review_metrics.json'), 'w'), indent=2, ensure_ascii=False)
