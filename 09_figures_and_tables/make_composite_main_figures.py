@@ -79,7 +79,8 @@ def dca(y_, p_, ths):
 # ============ Figure 2: discrimination, calibration, net benefit ============
 log('Figure 2: ROC + calibration + DCA')
 fig = plt.figure(figsize=(7.0, 5.9))
-gs = fig.add_gridspec(2, 2, height_ratios=[1.0, 0.86], hspace=0.34, wspace=0.34)
+gs = fig.add_gridspec(2, 2, height_ratios=[1.0, 0.86], hspace=0.34, wspace=0.34,
+                      width_ratios=[1.12, 0.88])
 axa, axb, axc = fig.add_subplot(gs[0, 0]), fig.add_subplot(gs[0, 1]), fig.add_subplot(gs[1, :])
 
 # (a) ROC
@@ -120,7 +121,7 @@ def _roc_legend(ax, lines, frame=False):
     box; if even the smallest size collides, an opaque white box is used instead.
     """
     leg = None
-    for fs, sp, hl in [(6.0, 0.24, 1.3), (5.6, 0.22, 1.2), (5.2, 0.20, 1.1), (4.8, 0.18, 1.0)]:
+    for fs, sp, hl in [(6.2, 0.24, 1.3), (5.8, 0.22, 1.2), (5.4, 0.20, 1.1), (5.0, 0.18, 1.0)]:
         if leg is not None:
             leg.remove()
         leg = ax.legend(loc='lower right', frameon=frame, fontsize=fs, labelspacing=sp,
