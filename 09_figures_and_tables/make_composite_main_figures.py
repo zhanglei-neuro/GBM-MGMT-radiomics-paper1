@@ -83,6 +83,7 @@ gs = fig.add_gridspec(2, 2, height_ratios=[1.0, 0.86], hspace=0.34, wspace=0.34)
 axa, axb, axc = fig.add_subplot(gs[0, 0]), fig.add_subplot(gs[0, 1]), fig.add_subplot(gs[1, :])
 
 # (a) ROC
+roc_lines = []
 for name, lab, c in [('logistic', 'Radiomics — logistic', CV[0]),
                      ('xgboost', 'Radiomics — XGBoost', CV[1]),
                      ('randomforest', 'Radiomics — random forest', CV[2]),
@@ -90,12 +91,51 @@ for name, lab, c in [('logistic', 'Radiomics — logistic', CV[0]),
                      ('combined', 'Clinical + radiomics', CV[4])]:
     p = pred['prob_' + name].values
     fpr, tpr, _ = roc_curve(y, p); a = roc_auc_score(y, p)
-    axa.plot(fpr, tpr, color=c, lw=1.3, label='%s  %.3f' % (lab, a))
+    roc_lines.append(axa.plot(fpr, tpr, color=c, lw=1.3, label='%s  %.3f' % (lab, a))[0])
 axa.plot([0, 1], [0, 1], 'k--', lw=.7)
 axa.set_xlabel('1 − Specificity'); axa.set_ylabel('Sensitivity')
 axa.set_title('(a) ROC curves, pooled out-of-fold', fontweight='bold', loc='left')
-axa.legend(loc='lower right', frameon=False, fontsize=6, handlelength=1.6,
-           title='AUC', title_fontsize=6)
+
+
+def _legend_hits(ax, leg, lines, n=40):
+    """Number of ROC segments that pass through the legend box (data coordinates)."""
+    ax.figure.canvas.draw()
+    bb = leg.get_window_extent(ax.figure.canvas.get_renderer()).transformed(ax.transData.inverted())
+    x0, x1, y0, y1 = bb.x0, bb.x1, bb.y0, bb.y1
+    hits = 0
+    for ln in lines:
+        xd, yd = np.asarray(ln.get_xdata(), float), np.asarray(ln.get_ydata(), float)
+        for i in range(len(xd) - 1):
+            xs = np.linspace(xd[i], xd[i + 1], n)
+            ys = np.linspace(yd[i], yd[i + 1], n)
+            hits += int(((xs > x0) & (xs < x1) & (ys > y0) & (ys < y1)).any())
+    return hits
+
+
+def _roc_legend(ax, lines, frame=False):
+    """Compact AUC legend in the lower-right corner, kept clear of the curves.
+
+    The five ROC curves dip below the identity line in this cohort, so the empty corner is
+    smaller than it looks. The legend is shrunk stepwise until no curve enters its bounding
+    box; if even the smallest size collides, an opaque white box is used instead.
+    """
+    leg = None
+    for fs, sp, hl in [(6.0, 0.24, 1.3), (5.6, 0.22, 1.2), (5.2, 0.20, 1.1), (4.8, 0.18, 1.0)]:
+        if leg is not None:
+            leg.remove()
+        leg = ax.legend(loc='lower right', frameon=frame, fontsize=fs, labelspacing=sp,
+                        handlelength=hl, handletextpad=0.35, borderpad=0.15,
+                        borderaxespad=0.32, title='AUC', title_fontsize=fs + 0.2)
+        if _legend_hits(ax, leg, lines) == 0:
+            log('Fig. 3a legend: %.1f pt, clear of the curves' % fs)
+            return leg
+    leg.remove()
+    if frame:
+        return leg
+    return _roc_legend(ax, lines, frame=True)
+
+
+_roc_legend(axa, roc_lines)
 
 # (b) calibration
 for name, lab, c in [('logistic', 'Logistic', CV[0]), ('xgboost', 'XGBoost', CV[1]),
